@@ -10,7 +10,7 @@ We follow the lightweight [Michael Nygard format](https://cognitect.com/blog/201
 ## Index
 
 - [0001 — Record architecture decisions](0001-record-architecture-decisions.md)
-- [0002 — Deterministic AES-GCM nonce derivation](0002-aes-gcm-nonce-derivation.md)
+- [0002 — Encryption and nonces](0002-encryption-and-nonces.md)
 - [0003 — Per-service hash chains](0003-per-service-hash-chains.md)
 - [0004 — Workspace layout and storage abstraction](0004-workspace-layout-and-storage-abstraction.md)
 - [0005 — Storage data model](0005-storage-data-model.md)

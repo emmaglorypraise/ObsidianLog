@@ -38,6 +38,9 @@ serde_json = "1.0.150"
 chrono = { version = "0.4.39", default-features = false, features = ["serde", "std"] }
 # Async methods on the StorageBackend trait (boxed, Send futures; object-safe).
 async-trait = "0.1.88"
+# Zeroize key material on drop so secrets don't linger in freed memory.
+# Pinned to the 1.8 line: 1.9 requires zeroize_derive 1.5, not yet in the index.
+zeroize = { version = "=1.8.1", features = ["derive"] }
 
 # Slimmer, faster release binaries for the cross-platform distribution targets.
 [profile.release]

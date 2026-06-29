@@ -7,7 +7,7 @@
 
 use anyhow::Result;
 
-use obsidianlog_store::encryption::Key;
+use obsidianlog_store::encrypt::EncryptionKey;
 
 /// Service name used to namespace ObsidianLog entries in the OS keychain.
 pub const KEYRING_SERVICE: &str = "obsidianlog";
@@ -25,7 +25,7 @@ pub enum KeySource {
 ///
 /// TODO(impl): CSPRNG-generate 32 bytes, store via keyring or a `0600` file, and
 /// refuse to overwrite an existing key unless explicitly forced.
-pub fn generate(source: &KeySource) -> Result<Key> {
+pub fn generate(source: &KeySource) -> Result<EncryptionKey> {
     let _ = source;
     todo!("generate and persist a new AES-256 key")
 }
@@ -34,7 +34,7 @@ pub fn generate(source: &KeySource) -> Result<Key> {
 ///
 /// TODO(impl): read the key from the keyring or secrets file (verifying file
 /// permissions are `0600`).
-pub fn load(source: &KeySource) -> Result<Key> {
+pub fn load(source: &KeySource) -> Result<EncryptionKey> {
     let _ = source;
     todo!("load the AES-256 key from its source")
 }

@@ -24,6 +24,8 @@ async-trait.workspace = true
 zstd = "0.13.3"
 aes-gcm = "0.10.3"
 sha2 = "0.11.0"
+# Zeroize-on-drop for the AES key newtype so key bytes don't linger in memory.
+zeroize.workspace = true
 
 [features]
 # Default builds and tests run entirely against the in-process `LocalBackend`

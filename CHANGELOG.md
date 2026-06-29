@@ -51,5 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ADR-0005.
 - `obsidianlog-store::compress`: zstd `compress`/`decompress` (default level 3),
   the first implemented pipeline stage.
+- `obsidianlog-store::encrypt`: AES-256-GCM `encrypt_chunk`/`decrypt_chunk` and a
+  zeroize-on-drop `EncryptionKey` newtype. Nonces are caller-supplied and derived
+  from the per-service sequence counter (never random); see ADR-0002. Renamed the
+  `encryption` stub module to `encrypt`.
 
 [Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/commits/main
