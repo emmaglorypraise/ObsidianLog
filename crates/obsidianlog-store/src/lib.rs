@@ -5,7 +5,7 @@
 //! the lightweight metadata index that queries hit first.
 //!
 //! Pipeline order (see the project architecture):
-//! [`compression`] → [`encryption`] → [`hashchain`] → [`chunk`], with
+//! [`compress`] → [`encryption`] → [`hashchain`] → [`chunk`], with
 //! [`index`] and [`manifest`] tracking metadata and the chain head.
 //!
 //! The durable-storage integration is isolated behind the
@@ -27,7 +27,7 @@
 
 pub mod backend;
 pub mod chunk;
-pub mod compression;
+pub mod compress;
 pub mod encryption;
 pub mod error;
 pub mod hashchain;

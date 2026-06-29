@@ -49,5 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Error`. The `StorageBackend` trait is now async (`async-trait`) with
   chunk/index/manifest methods and a documented durability contract. See
   ADR-0005.
+- `obsidianlog-store::compress`: zstd `compress`/`decompress` (default level 3),
+  the first implemented pipeline stage.
 
 [Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/commits/main
