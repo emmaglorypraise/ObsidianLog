@@ -4,8 +4,10 @@
 //! passes through before it touches durable storage, over a pluggable backend.
 //!
 //! Pipeline order (see the project architecture):
-//! [`chunking`] (group a batch into per-`(service, window)` buckets) →
-//! [`compress`] → [`encrypt`] → [`chain`] (hash-link per service).
+//! [`parse`] (raw Vector events → records) → [`chunking`] (group into
+//! per-`(service, window)` buckets) → [`compress`] → [`encrypt`] → [`chain`]
+//! (hash-link per service), with [`index`] building the lightweight metadata
+//! queries hit first.
 //!
 //! The durable-storage integration is isolated behind the
 //! [`backend::StorageBackend`] trait (defined in `obsidianlog-core`). The
@@ -24,5 +26,7 @@ pub mod chunking;
 pub mod compress;
 pub mod encrypt;
 pub mod error;
+pub mod index;
+pub mod parse;
 
 pub use error::{Error, Result};

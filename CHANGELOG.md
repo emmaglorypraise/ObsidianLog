@@ -64,5 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Completed the store→core migration: removed the duplicate `index`/`manifest`
   stub modules (core owns those types) and renamed `hashchain`→`chain`,
   `chunk`→`chunking`.
+- `obsidianlog-store::parse`: tolerant Vector-event parsing into `LogRecord`s
+  (missing fields → `None`, unparseable timestamp → ingest time with a flag,
+  malformed input never panics).
+- `obsidianlog-store::index`: builds the lightweight `ServiceWindowIndex`
+  (min/max time, level/host sets, keyword tokens) per chunk, plus a conservative
+  `might_match` prefilter over `IndexQuery`.
 
 [Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/commits/main
