@@ -52,8 +52,9 @@ ingest server.
 | `obsidianlog-core`: data model + async `StorageBackend` trait | [#3](https://github.com/emmaglorypraise/ObsidianLog/pull/3) | _Done._ Foundation for the storage library. Canonical hashing layout + per-service chains; ADR-0005. |
 | `obsidianlog-store`: zstd compression | [#5](https://github.com/emmaglorypraise/ObsidianLog/pull/5) | _Done._ `compress`/`decompress`, default level 3; round-trip + ratio tests. |
 | `obsidianlog-store`: AES-256-GCM encryption + deterministic nonces | [#6](https://github.com/emmaglorypraise/ObsidianLog/pull/6) | _Done._ `encrypt_chunk`/`decrypt_chunk`, zeroize key, caller-supplied counter nonce; ADR-0002. |
-| `obsidianlog-store`: SHA-256 per-service hash chaining + manifest | _pending_ | Implements ADR-0003. |
-| `obsidianlog-store`: chunking + `LocalBackend` (Sia-free) | _pending_ | Unblocks the pipeline integration tests. |
+| `obsidianlog-store`: SHA-256 per-service hash chaining (`chain`) | [#7](https://github.com/emmaglorypraise/ObsidianLog/pull/7) | _Done._ `compute_chunk_hash`, `ChainBuilder`, `verify_chain`; ADR-0003. Manifest persistence lands with `LocalBackend`. |
+| `obsidianlog-store`: time-window `chunking` | [#7](https://github.com/emmaglorypraise/ObsidianLog/pull/7) | _Done._ `chunk_batch` into per-`(service, window)` buckets. |
+| `obsidianlog-store`: `LocalBackend` (Sia-free) | _pending_ | Persists chunks/index/manifest; unblocks the pipeline integration tests. |
 | `obsidianlog-ingest`: Vector-compatible HTTP ingest server (`/ingest`, `/health`) | _pending_ | |
 | Integration test suite with CI | _in progress_ | CI green (`3ceb7ca`); pipeline/ingest tests scaffolded and `#[ignore]`d until logic lands. |
 | ADR documenting finalized storage decisions | _done_ | `3ceb7ca` — ADR-0002 (nonces), ADR-0003 (chains), ADR-0004 (layout). |
