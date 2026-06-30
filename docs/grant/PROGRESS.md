@@ -54,6 +54,7 @@ ingest server.
 | `obsidianlog-store`: AES-256-GCM encryption + deterministic nonces | [#6](https://github.com/emmaglorypraise/ObsidianLog/pull/6) | _Done._ `encrypt_chunk`/`decrypt_chunk`, zeroize key, caller-supplied counter nonce; ADR-0002. |
 | `obsidianlog-store`: SHA-256 per-service hash chaining (`chain`) | [#7](https://github.com/emmaglorypraise/ObsidianLog/pull/7) | _Done._ `compute_chunk_hash`, `ChainBuilder`, `verify_chain`; ADR-0003. Manifest persistence lands with `LocalBackend`. |
 | `obsidianlog-store`: time-window `chunking` | [#7](https://github.com/emmaglorypraise/ObsidianLog/pull/7) | _Done._ `chunk_batch` into per-`(service, window)` buckets. |
+| `obsidianlog-store`: log parsing + metadata index (`parse`, `index`) | [#8](https://github.com/emmaglorypraise/ObsidianLog/pull/8) | _Done._ Tolerant Vector-event parsing; `ServiceWindowIndex` + `might_match` prefilter. |
 | `obsidianlog-store`: `LocalBackend` (Sia-free) | _pending_ | Persists chunks/index/manifest; unblocks the pipeline integration tests. |
 | `obsidianlog-ingest`: Vector-compatible HTTP ingest server (`/ingest`, `/health`) | _pending_ | |
 | Integration test suite with CI | _in progress_ | CI green (`3ceb7ca`); pipeline/ingest tests scaffolded and `#[ignore]`d until logic lands. |
