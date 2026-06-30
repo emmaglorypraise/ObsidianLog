@@ -70,5 +70,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `obsidianlog-store::index`: builds the lightweight `ServiceWindowIndex`
   (min/max time, level/host sets, keyword tokens) per chunk, plus a conservative
   `might_match` prefilter over `IndexQuery`.
+- `obsidianlog-store::backend::LocalBackend`: filesystem implementation of the
+  `StorageBackend` trait under `<root>/<bucket>` (chunks/index/manifest). Writes
+  are atomic and durable (temp file → fsync → rename → dir fsync); reads return
+  `Error::NotFound` when missing; `list_chunks` filters by service and optional
+  time range; `update_manifest` serializes concurrent manifest updates. Chunks
+  use a compact `u32(header) || header-json || ciphertext` frame.
 
 [Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/commits/main

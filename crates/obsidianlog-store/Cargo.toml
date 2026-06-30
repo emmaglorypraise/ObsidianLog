@@ -32,6 +32,10 @@ chrono.workspace = true
 [dev-dependencies]
 # Integration tests (separate crate) need the core types directly.
 obsidianlog-core.workspace = true
+# Driving the async StorageBackend in tests; multi-thread for the concurrency test.
+tokio = { version = "1.52.3", features = ["rt", "rt-multi-thread", "macros"] }
+# Throwaway directories for filesystem-backend tests.
+tempfile = "3.23.0"
 
 [features]
 # Default builds and tests run entirely against the in-process `LocalBackend`

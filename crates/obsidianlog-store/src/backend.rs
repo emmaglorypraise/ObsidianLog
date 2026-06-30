@@ -9,8 +9,8 @@
 //! - [`sia`] — [`SiaBackend`], the real Sia integration. Compiled only with the
 //!   `sia` feature so the pre-1.0 Sia SDK never enters a default build.
 //!
-//! Backends are append-only: [`StorageBackend::put`] writes objects that are
-//! never modified or deleted post-write.
+//! Backends are append-only: written chunks are never modified or deleted
+//! post-write, and every write is made durable before it returns `Ok`.
 
 pub use obsidianlog_core::backend::StorageBackend;
 
