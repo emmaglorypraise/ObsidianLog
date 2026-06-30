@@ -55,5 +55,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   zeroize-on-drop `EncryptionKey` newtype. Nonces are caller-supplied and derived
   from the per-service sequence counter (never random); see ADR-0002. Renamed the
   `encryption` stub module to `encrypt`.
+- `obsidianlog-store::chain`: SHA-256 `compute_chunk_hash`, a per-service
+  `ChainBuilder` (assigns sequence + `prev_hash`), and `verify_chain` reporting
+  the position and kind (modified/reordered/missing) of the first break. See
+  ADR-0003.
+- `obsidianlog-store::chunking`: groups a `LogBatch` into per-`(service, window)`
+  buckets with `YYYY-MM-DD-HH` labels (configurable window, default 1 hour).
+- Completed the store→core migration: removed the duplicate `index`/`manifest`
+  stub modules (core owns those types) and renamed `hashchain`→`chain`,
+  `chunk`→`chunking`.
 
 [Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/commits/main

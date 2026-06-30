@@ -12,7 +12,7 @@ use crate::cli::QueryArgs;
 
 /// Execute a query and render results to stdout.
 ///
-/// TODO(impl): build an `obsidianlog_store::index::IndexQuery`, resolve matching
+/// TODO(impl): build an index query over `obsidianlog_core` metadata, resolve matching
 /// chunks, fetch + decrypt them, apply keyword filtering, and render per
 /// `args.format`.
 pub fn run(args: QueryArgs, config: Option<PathBuf>) -> Result<()> {

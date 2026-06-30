@@ -4,7 +4,7 @@
 //! `#[ignore]`d until the pipeline is implemented so CI stays green on the
 //! scaffold while still tracking the intended behavior.
 
-use obsidianlog_store::chunk::ChunkId;
+use obsidianlog_core::types::ChunkId;
 
 #[test]
 fn chunk_paths_follow_on_sia_layout() {

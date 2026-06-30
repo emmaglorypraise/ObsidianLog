@@ -26,6 +26,12 @@ aes-gcm = "0.10.3"
 sha2 = "0.11.0"
 # Zeroize-on-drop for the AES key newtype so key bytes don't linger in memory.
 zeroize.workspace = true
+# Time-window labels (YYYY-MM-DD-HH) for chunking.
+chrono.workspace = true
+
+[dev-dependencies]
+# Integration tests (separate crate) need the core types directly.
+obsidianlog-core.workspace = true
 
 [features]
 # Default builds and tests run entirely against the in-process `LocalBackend`
