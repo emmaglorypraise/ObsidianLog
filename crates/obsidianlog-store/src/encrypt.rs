@@ -17,6 +17,7 @@
 
 use aes_gcm::aead::{Aead, Nonce};
 use aes_gcm::{Aes256Gcm, Key, KeyInit};
+use sha2::{Digest, Sha256};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::error::{Error, Result};
@@ -50,6 +51,24 @@ impl std::fmt::Debug for EncryptionKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("EncryptionKey(<redacted>)")
     }
+}
+
+/// Derive the deterministic 96-bit nonce for a chunk from its `service` and
+/// per-service `sequence` number.
+///
+/// Layout: the first 4 bytes are a service discriminator (`SHA-256(service)[..4]`)
+/// and the last 8 bytes are the big-endian sequence. Within one service the
+/// discriminator is constant and the monotonic `sequence` is unique, so a
+/// `(key, nonce)` pair is **never reused for that service** — the guarantee GCM
+/// depends on (see ADR-0002). Across services the 32-bit discriminator makes a
+/// collision negligible for realistic service counts; a manifest-assigned unique
+/// service id would make cross-service uniqueness total.
+pub fn derive_nonce(service: &str, sequence: u64) -> [u8; NONCE_LEN] {
+    let digest = Sha256::digest(service.as_bytes());
+    let mut nonce = [0u8; NONCE_LEN];
+    nonce[..4].copy_from_slice(&digest[..4]);
+    nonce[4..].copy_from_slice(&sequence.to_be_bytes());
+    nonce
 }
 
 /// Encrypt `plaintext` with AES-256-GCM under `key` and `nonce`.
@@ -146,5 +165,17 @@ mod tests {
     fn wrong_key_fails() {
         let ciphertext = encrypt_chunk(&key_a(), NONCE, b"payload").expect("encrypt");
         assert!(decrypt_chunk(&key_b(), NONCE, &ciphertext).is_err());
+    }
+
+    #[test]
+    fn derive_nonce_is_deterministic_unique_per_sequence() {
+        // Deterministic.
+        assert_eq!(derive_nonce("api", 7), derive_nonce("api", 7));
+        // Unique per sequence within a service.
+        assert_ne!(derive_nonce("api", 0), derive_nonce("api", 1));
+        // Different services get different nonces at the same sequence.
+        assert_ne!(derive_nonce("api", 0), derive_nonce("web", 0));
+        // The sequence occupies the low 8 bytes.
+        assert_eq!(derive_nonce("api", 42)[4..], 42u64.to_be_bytes());
     }
 }

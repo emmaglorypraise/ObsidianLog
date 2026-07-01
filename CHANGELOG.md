@@ -76,5 +76,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Error::NotFound` when missing; `list_chunks` filters by service and optional
   time range; `update_manifest` serializes concurrent manifest updates. Chunks
   use a compact `u32(header) || header-json || ciphertext` frame.
+- `obsidianlog-store::ArchiveEngine`: the end-to-end pipeline over any
+  `StorageBackend`. `ingest_batch` chunks → compresses → encrypts → hash-chains →
+  indexes → persists, per-service serialized (per-service async lock plus a
+  global manifest lock), acknowledging only after durable writes. Adds
+  `encrypt::derive_nonce(service, sequence)`. The two `tests/pipeline.rs`
+  integration tests (round-trip, tamper-detection) are now live.
 
 [Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/commits/main

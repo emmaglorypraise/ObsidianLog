@@ -28,6 +28,9 @@ sha2 = "0.11.0"
 zeroize.workspace = true
 # Time-window labels (YYYY-MM-DD-HH) for chunking.
 chrono.workspace = true
+# Async locks for the ArchiveEngine's per-service serialization (sync only — the
+# runtime is provided by the caller, e.g. the ingest server).
+tokio = { version = "1.52.3", features = ["sync"] }
 
 [dev-dependencies]
 # Integration tests (separate crate) need the core types directly.
@@ -36,6 +39,8 @@ obsidianlog-core.workspace = true
 tokio = { version = "1.52.3", features = ["rt", "rt-multi-thread", "macros"] }
 # Throwaway directories for filesystem-backend tests.
 tempfile = "3.23.0"
+# Building record timestamps in the end-to-end integration tests.
+chrono.workspace = true
 
 [features]
 # Default builds and tests run entirely against the in-process `LocalBackend`

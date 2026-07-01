@@ -25,8 +25,10 @@ pub mod chain;
 pub mod chunking;
 pub mod compress;
 pub mod encrypt;
+pub mod engine;
 pub mod error;
 pub mod index;
 pub mod parse;
 
+pub use engine::ArchiveEngine;
 pub use error::{Error, Result};
