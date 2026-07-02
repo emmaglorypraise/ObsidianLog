@@ -65,6 +65,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # `checks: write` lets rustsec/audit-check post its results as a check run.
+      # Without it the action errors ("Resource not accessible by integration")
+      # whenever it has anything to report — e.g. the `instant` unmaintained
+      # notice pulled in transitively (wasm-only) by the optional Sia SDK.
+      checks: write
       issues: write
     steps:
       - uses: actions/checkout@v7
