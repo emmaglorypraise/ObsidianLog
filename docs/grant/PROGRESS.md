@@ -57,6 +57,7 @@ ingest server.
 | `obsidianlog-store`: log parsing + metadata index (`parse`, `index`) | [#8](https://github.com/emmaglorypraise/ObsidianLog/pull/8) | _Done._ Tolerant Vector-event parsing; `ServiceWindowIndex` + `might_match` prefilter. |
 | `obsidianlog-store`: `LocalBackend` (Sia-free) | [#9](https://github.com/emmaglorypraise/ObsidianLog/pull/9) | _Done._ Atomic+durable filesystem store; not-found reads; ranged `list`; serialized manifest updates. |
 | `obsidianlog-store`: end-to-end archive pipeline (`ArchiveEngine`) | [#10](https://github.com/emmaglorypraise/ObsidianLog/pull/10) | _Done._ `ingest_batch` chunk→compress→encrypt→chain→index→persist, per-service serialized; milestone round-trip test. |
+| `obsidianlog-store`: feature-gated `SiaBackend` (`sia_storage`) | [#11](https://github.com/emmaglorypraise/ObsidianLog/pull/11) | _Done._ Real Sia backend behind the `sia` feature (pinned `=0.10.0`, rustls); env-gated integration test. ADR-0006. Brings Milestone-3 Sia work forward. |
 | `obsidianlog-ingest`: Vector-compatible HTTP ingest server (`/ingest`, `/health`) | _pending_ | Wires `ArchiveEngine` behind HTTP — final Month-1 deliverable. |
 | Integration test suite with CI | _in progress_ | CI green across 3 OSes + audit; store end-to-end pipeline tests live ([#10](https://github.com/emmaglorypraise/ObsidianLog/pull/10)); ingest HTTP tests pending the server. |
 | ADR documenting finalized storage decisions | _done_ | `3ceb7ca` — ADR-0002 (nonces), ADR-0003 (chains), ADR-0004 (layout). |
