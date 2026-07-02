@@ -50,11 +50,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # Default (Sia-free) build/test across all platforms — the mock-first path
+      # every user gets. The optional, pre-1.0 `sia` feature is compiled and
+      # linted separately (Linux only, in the lint job) so its heavy dependency
+      # tree never gates the cross-platform matrix. See ADR-0004 / ADR-0006.
       - name: Build
-        run: cargo build --workspace --all-features
+        run: cargo build --workspace
 
       - name: Test
-        run: cargo test --workspace --all-features
+        run: cargo test --workspace
 
   audit:
     name: cargo audit
