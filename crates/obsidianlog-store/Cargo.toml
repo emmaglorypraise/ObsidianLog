@@ -32,6 +32,12 @@ chrono.workspace = true
 # runtime is provided by the caller, e.g. the ingest server).
 tokio = { version = "1.52.3", features = ["sync"] }
 
+# The Sia integration (behind the `sia` feature only). PINNED to an exact
+# version: sia_storage is pre-1.0 and ships breaking changes on minor bumps, so
+# upgrades must be deliberate — bump this and re-test against ADR-0006. It brings
+# its own reqwest configured with rustls-tls (no native-tls / OpenSSL).
+sia_storage = { version = "=0.10.0", optional = true }
+
 [dev-dependencies]
 # Integration tests (separate crate) need the core types directly.
 obsidianlog-core.workspace = true
@@ -48,5 +54,6 @@ chrono.workspace = true
 default = []
 # Enables the real Sia integration (`backend::SiaBackend`). The pre-1.0 Sia SDK
 # (`sia_storage`) is wired in here, behind this feature, so default builds never
-# depend on it. Keep the SDK confined to `src/backend/sia.rs`.
-sia = []
+# depend on it. Keep the SDK confined to `src/backend/sia.rs`. Also turns on
+# tokio's io-util for the SDK's AsyncRead upload/download.
+sia = ["dep:sia_storage", "tokio/io-util"]

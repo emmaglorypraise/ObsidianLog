@@ -29,8 +29,9 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 
+use super::{decode_chunk, encode_chunk, overlaps};
 use obsidianlog_core::backend::{StorageBackend, TimeRange};
-use obsidianlog_core::chunk::{Chunk, ChunkHeader, ChunkRef};
+use obsidianlog_core::chunk::{Chunk, ChunkRef};
 use obsidianlog_core::error::{Error, Result};
 use obsidianlog_core::index::ServiceWindowIndex;
 use obsidianlog_core::manifest::Manifest;
@@ -188,36 +189,6 @@ fn safe(component: &str) -> Result<&str> {
     Ok(component)
 }
 
-/// Does an index's time span overlap the query range `[start, end]`?
-fn overlaps(index: &ServiceWindowIndex, range: TimeRange) -> bool {
-    !(index.max_timestamp < range.start || index.min_timestamp > range.end)
-}
-
-/// Frame a chunk as `u32(header_len) || header_json || ciphertext`.
-fn encode_chunk(chunk: &Chunk) -> Result<Vec<u8>> {
-    let header = serde_json::to_vec(&chunk.header)?;
-    let mut out = Vec::with_capacity(4 + header.len() + chunk.ciphertext.len());
-    out.extend_from_slice(&(header.len() as u32).to_be_bytes());
-    out.extend_from_slice(&header);
-    out.extend_from_slice(&chunk.ciphertext);
-    Ok(out)
-}
-
-/// Decode a chunk framed by [`encode_chunk`].
-fn decode_chunk(bytes: &[u8]) -> Result<Chunk> {
-    let len_bytes: [u8; 4] = bytes
-        .get(0..4)
-        .and_then(|s| s.try_into().ok())
-        .ok_or_else(|| Error::Serialization("chunk frame too short for header length".into()))?;
-    let header_len = u32::from_be_bytes(len_bytes) as usize;
-    let header_bytes = bytes
-        .get(4..4 + header_len)
-        .ok_or_else(|| Error::Serialization("chunk frame truncated in header".into()))?;
-    let header: ChunkHeader = serde_json::from_slice(header_bytes)?;
-    let ciphertext = bytes[4 + header_len..].to_vec();
-    Ok(Chunk { header, ciphertext })
-}
-
 /// Read a file, mapping a missing file to [`Error::NotFound`] via `describe`.
 fn read_file(path: &Path, describe: impl FnOnce() -> String) -> Result<Vec<u8>> {
     match fs::read(path) {
@@ -256,6 +227,7 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 mod tests {
     use super::*;
     use chrono::{DateTime, Utc};
+    use obsidianlog_core::chunk::ChunkHeader;
     use obsidianlog_core::manifest::ManifestServiceChain;
     use std::collections::BTreeSet;
 

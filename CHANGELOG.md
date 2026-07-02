@@ -82,5 +82,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   global manifest lock), acknowledging only after durable writes. Adds
   `encrypt::derive_nonce(service, sequence)`. The two `tests/pipeline.rs`
   integration tests (round-trip, tamper-detection) are now live.
+- `obsidianlog-store::backend::SiaBackend`: a `StorageBackend` over the Sia
+  Foundation's `sia_storage` SDK (indexd app API), behind a non-default `sia`
+  cargo feature (default builds/tests stay Sia-free). The SDK is content-
+  addressed, so our `(service, window)` paths are stored in object metadata and
+  resolved by scanning `object_events`. `sia_storage` is pinned to `=0.10.0` and
+  uses rustls; an env-gated integration test (`OBSIDIANLOG_INDEXD_URL`) reuses the
+  milestone end-to-end assertions. See ADR-0006.
 
 [Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/commits/main
