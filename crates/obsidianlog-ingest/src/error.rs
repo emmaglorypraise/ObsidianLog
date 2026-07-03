@@ -12,6 +12,10 @@ pub enum Error {
     #[error("failed to start ingest server: {0}")]
     Serve(String),
 
+    /// The configuration file could not be read or parsed.
+    #[error("invalid config: {0}")]
+    Config(String),
+
     /// An incoming batch could not be parsed as expected JSON log events.
     #[error("invalid ingest payload: {0}")]
     Payload(String),

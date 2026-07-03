@@ -11,11 +11,28 @@ homepage.workspace = true
 keywords = ["logging", "sia", "vector", "ingest", "http"]
 categories = ["network-programming"]
 
+[[bin]]
+name = "obsidianlog-ingest"
+path = "src/main.rs"
+
 [dependencies]
+obsidianlog-core.workspace = true
 obsidianlog-store.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# Ingest-time fallback timestamp for events without a parseable one (Utc::now).
+chrono = { version = "0.4.39", default-features = false, features = ["serde", "std", "clock"] }
+# Config file parsing.
+toml = "0.8.19"
 # HTTP server for the Vector-compatible `/ingest` endpoint and its runtime.
 axum = "0.8.9"
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "net", "macros", "signal"] }
+
+[dev-dependencies]
+# Integration test: HTTP client over rustls (never native-tls), a temp store
+# directory, an async runtime, and the store types to verify archived data.
+reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls", "json"] }
+tempfile = "3.23.0"
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros"] }
+obsidianlog-store.workspace = true

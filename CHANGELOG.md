@@ -89,5 +89,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resolved by scanning `object_events`. `sia_storage` is pinned to `=0.10.0` and
   uses rustls; an env-gated integration test (`OBSIDIANLOG_INDEXD_URL`) reuses the
   milestone end-to-end assertions. See ADR-0006.
+- `obsidianlog-ingest`: a Vector-compatible HTTP ingest server (axum/tokio).
+  `POST /ingest` accepts a JSON array of events (or NDJSON), parses tolerantly,
+  and archives via `ArchiveEngine` — **write-then-ack** (`200` only after a
+  durable write; `5xx` on failure so Vector retries; `400` on malformed input).
+  `GET /health` for readiness. Config (bind/bucket/storage-root/window) loads from
+  a TOML file or defaults; ships a thin `obsidianlog-ingest` binary and an
+  `examples/vector.toml`. Integration tests boot the server on an ephemeral port,
+  POST over reqwest (rustls), and verify the archived batch. The workspace now has
+  **zero ignored tests**.
 
 [Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/commits/main

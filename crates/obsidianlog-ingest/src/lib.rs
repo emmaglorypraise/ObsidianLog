@@ -1,45 +1,80 @@
 //! ObsidianLog HTTP ingest service.
 //!
-//! Runs a lightweight local HTTP server that receives batched JSON log events
-//! from Vector's built-in HTTP sink at `POST /ingest`, then drives each batch
-//! through the [`obsidianlog_store`] pipeline (parse → compress → encrypt →
-//! hash-chain → chunk) and on to Sia via indexd.
+//! A lightweight local HTTP server that receives batched JSON log events from
+//! Vector's built-in HTTP sink at `POST /ingest`, then drives each batch through
+//! the [`obsidianlog_store`] pipeline (parse → chunk → compress → encrypt →
+//! hash-chain → index → persist) via an [`ArchiveEngine`] over a filesystem
+//! [`LocalBackend`].
 //!
-//! Vector owns buffering, backpressure, and retry, so this service stays small:
-//! accept a batch, process it, acknowledge. A native compiled Vector sink is
-//! deferred to Phase 2.
-//!
-//! # Status
-//!
-//! Scaffold. [`serve`] / [`serve_blocking`] are wired but stubbed.
+//! **Write-then-ack:** a batch is acknowledged with `200` only after it is
+//! durably written; failures return `5xx`. Vector owns buffering, backpressure,
+//! and retry, so this service stays small — accept, archive, acknowledge.
 
+pub mod config;
 pub mod error;
 pub mod server;
 
+pub use config::Config;
 pub use error::{Error, Result};
 
-/// Configuration for the ingest server.
-#[derive(Debug, Clone)]
-pub struct IngestConfig {
-    /// Address to bind the HTTP endpoint to (e.g. `127.0.0.1:7080`).
-    pub bind: String,
+use std::sync::Arc;
+
+use obsidianlog_store::ArchiveEngine;
+use obsidianlog_store::backend::LocalBackend;
+use obsidianlog_store::encrypt::EncryptionKey;
+
+use crate::server::{SharedEngine, build_router};
+
+/// Build an [`ArchiveEngine`] over a filesystem [`LocalBackend`] from `config`.
+pub fn build_engine(config: &Config) -> ArchiveEngine<LocalBackend> {
+    let backend = LocalBackend::new(&config.storage_root, &config.bucket);
+    ArchiveEngine::new(
+        backend,
+        EncryptionKey::new(config.encryption_key),
+        config.bucket.clone(),
+    )
+    .with_window_secs(config.window_secs)
 }
 
-/// Run the ingest server to completion on the provided async runtime.
+/// Serve the ingest router on `listener` until it is closed (no signal handling).
 ///
-/// TODO(impl): build the [`server`] router, bind `config.bind`, and serve until
-/// shutdown.
-pub async fn serve(config: IngestConfig) -> Result<()> {
-    let _ = config;
-    todo!("run the Vector-compatible HTTP ingest server")
+/// Useful for tests that bind an ephemeral port themselves; production callers
+/// use [`serve`].
+pub async fn serve_on(listener: tokio::net::TcpListener, engine: SharedEngine) -> Result<()> {
+    axum::serve(listener, build_router(engine))
+        .await
+        .map_err(|e| Error::Serve(e.to_string()))
 }
 
-/// Synchronous entry point for callers without an async runtime (e.g. the CLI).
-///
-/// Builds a Tokio runtime and blocks on [`serve`].
-///
-/// TODO(impl): construct the multi-thread runtime and `block_on(serve(config))`.
-pub fn serve_blocking(config: IngestConfig) -> Result<()> {
-    let _ = config;
-    todo!("build a Tokio runtime and block on `serve`")
+/// Run the ingest server until shutdown (Ctrl-C), binding `config.bind`.
+pub async fn serve(config: Config) -> Result<()> {
+    if config.encryption_key == [0u8; 32] {
+        eprintln!(
+            "warning: ingest is running with an all-zero encryption key; \
+             set a real key before archiving production data"
+        );
+    }
+
+    let engine = Arc::new(build_engine(&config));
+    let listener = tokio::net::TcpListener::bind(&config.bind)
+        .await
+        .map_err(|e| Error::Serve(format!("bind {}: {e}", config.bind)))?;
+
+    axum::serve(listener, build_router(engine))
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .map_err(|e| Error::Serve(e.to_string()))
+}
+
+/// Synchronous entry point for callers without an async runtime (e.g. the CLI):
+/// builds a multi-thread Tokio runtime and blocks on [`serve`].
+pub fn serve_blocking(config: Config) -> Result<()> {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(serve(config))
+}
+
+async fn shutdown_signal() {
+    let _ = tokio::signal::ctrl_c().await;
 }

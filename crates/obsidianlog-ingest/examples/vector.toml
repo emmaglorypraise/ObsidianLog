@@ -1,0 +1,38 @@
+# Example Vector configuration for shipping logs to ObsidianLog.
+#
+# Vector reads your logs, then its HTTP sink POSTs them (as a JSON array) to the
+# ObsidianLog ingest server. ObsidianLog uses write-then-ack: it returns 200 only
+# after a durable write and 5xx on failure — Vector owns buffering, backpressure,
+# and retry, so a 5xx is simply retried.
+#
+#   obsidianlog-ingest              # start the server (defaults to 127.0.0.1:7080)
+#   vector --config vector.toml     # start shipping
+
+# --- Source: tail your application's log files (swap for your real source) ---
+[sources.app_logs]
+type = "file"
+include = ["/var/log/myapp/*.log"]
+
+# --- Optional: parse each line into structured fields ObsidianLog indexes on ---
+# ObsidianLog reads `timestamp`, `service`, `level`, `host`, `trace_id` when
+# present, and tolerates anything missing.
+[transforms.structure]
+type = "remap"
+inputs = ["app_logs"]
+source = '''
+  . = object!(parse_json(.message) ?? { "message": .message })
+  .service = .service || "myapp"
+'''
+
+# --- Sink: POST batches to the ObsidianLog ingest endpoint ---
+[sinks.obsidianlog]
+type = "http"
+inputs = ["structure"]
+uri = "http://localhost:7080/ingest"
+method = "post"
+encoding.codec = "json"        # sends each batch as a JSON array of events
+
+# Retry on ObsidianLog's 5xx (durable-write failures); Vector buffers meanwhile.
+request.retry_attempts = 10
+batch.max_bytes = 10485760     # 10 MiB
+batch.timeout_secs = 5
