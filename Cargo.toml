@@ -1,12 +1,5 @@
-# ObsidianLog Cargo workspace.
-#
-# The MVP is split into the three crates the proposal calls for:
-#   - obsidianlog-store   the core storage library (compress/encrypt/chain/chunk)
-#   - obsidianlog-ingest  the Vector-compatible HTTP ingest service
-#   - obsidianlog         the CLI (query, verify, init) and the published binary
-#
-# Shared metadata and common dependencies are centralized here so every member
-# stays in lockstep on versions — the maintainable default for a workspace.
+# ObsidianLog Cargo workspace. Shared metadata and dependencies are centralized
+# here so all members stay in lockstep on versions.
 
 [workspace]
 resolver = "3"
@@ -27,8 +20,7 @@ obsidianlog-core = { path = "crates/obsidianlog-core", version = "0.1.0" }
 obsidianlog-store = { path = "crates/obsidianlog-store", version = "0.1.0" }
 obsidianlog-ingest = { path = "crates/obsidianlog-ingest", version = "0.1.0" }
 
-# Shared external dependencies. Crate-specific deps (zstd, aes-gcm, sha2, axum,
-# tokio, keyring) live in the member that owns them.
+# Shared dependencies; crate-specific ones live in the member that owns them.
 anyhow = "1.0.102"
 thiserror = "2.0.18"
 clap = { version = "4.6.1", features = ["derive"] }
@@ -36,10 +28,10 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 # Timestamps in the data model (DateTime<Utc>), with serde support.
 chrono = { version = "0.4.39", default-features = false, features = ["serde", "std"] }
-# Async methods on the StorageBackend trait (boxed, Send futures; object-safe).
+# Async methods on the StorageBackend trait.
 async-trait = "0.1.88"
-# Zeroize key material on drop so secrets don't linger in freed memory.
-# Pinned to the 1.8 line: 1.9 requires zeroize_derive 1.5, not yet in the index.
+# Zeroize key material on drop. Pinned to 1.8: 1.9 needs zeroize_derive 1.5,
+# not yet in the index.
 zeroize = { version = "=1.8.1", features = ["derive"] }
 
 # Slimmer, faster release binaries for the cross-platform distribution targets.

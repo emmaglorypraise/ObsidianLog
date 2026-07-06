@@ -5,7 +5,7 @@
 //!
 //! - [`local`] — [`LocalBackend`], a filesystem-backed store that is the
 //!   **default**. The whole pipeline builds, runs, and tests against it with no
-//!   Sia node — the mock-first invariant (see CLAUDE.md / ADR-0004).
+//!   Sia node — the mock-first invariant (see ADR-0004).
 //! - [`sia`] — [`SiaBackend`], the real Sia integration. Compiled only with the
 //!   `sia` feature so the pre-1.0 Sia SDK never enters a default build (ADR-0006).
 //!
