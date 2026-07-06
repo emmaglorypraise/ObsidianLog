@@ -7,8 +7,8 @@
 //!
 //! # Status
 //!
-//! Scaffold. The CLI parses and dispatches; each command body is a `todo!()`
-//! with a `TODO(impl)` note.
+//! The argument surface is complete and dispatches to each command; the command
+//! implementations (`init`, `ingest`, `query`, `verify`) are in progress.
 
 pub mod cli;
 pub mod commands;

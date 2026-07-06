@@ -19,8 +19,8 @@ serde.workspace = true
 serde_json.workspace = true
 # Implementing the async StorageBackend trait from obsidianlog-core.
 async-trait.workspace = true
-# Pipeline primitives named in the architecture. Kept here so the storage layer
-# owns its cryptographic surface; the implementer wires these into the stubs.
+# Pipeline primitives: zstd (compression), AES-256-GCM (encryption), and SHA-256
+# (hash chaining). The storage layer owns its cryptographic surface here.
 zstd = "0.13.3"
 aes-gcm = "0.10.3"
 sha2 = "0.11.0"
