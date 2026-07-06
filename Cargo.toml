@@ -32,7 +32,7 @@ chrono = { version = "0.4.39", default-features = false, features = ["serde", "s
 async-trait = "0.1.88"
 # Zeroize key material on drop. Pinned to 1.8: 1.9 needs zeroize_derive 1.5,
 # not yet in the index.
-zeroize = { version = "=1.8.1", features = ["derive"] }
+zeroize = { version = "=1.9.0", features = ["derive"] }
 
 # Slimmer, faster release binaries for the cross-platform distribution targets.
 [profile.release]
