@@ -117,5 +117,4 @@ When a task's PR merges (or, for early work, a commit lands):
    (difficulties, partial completion, follow-ups).
 2. Change `_pending_` / `_in progress_` to `_done_` once complete.
 
-At month end, the completed rows for that month's milestone are the report
-submitted to the Sia Foundation forum.
+

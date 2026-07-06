@@ -4,7 +4,7 @@
 # Backtraces emitted on panic
 backtrace.txt
 
-# Local secrets and runtime config (never commit keys)
+# Local secrets and runtime config 
 /.obsidianlog
 *.secret
 *.key
