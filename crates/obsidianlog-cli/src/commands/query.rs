@@ -18,5 +18,5 @@ use crate::cli::QueryArgs;
 /// `args.format`.
 pub fn run(args: QueryArgs, config: Option<PathBuf>) -> Result<()> {
     let _ = (args, config);
-    todo!("implement archived-log query")
+    anyhow::bail!("obsidianlog query is not yet implemented — see the roadmap")
 }

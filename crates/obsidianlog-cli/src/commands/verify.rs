@@ -18,5 +18,5 @@ use crate::cli::VerifyArgs;
 /// break position.
 pub fn run(args: VerifyArgs, config: Option<PathBuf>) -> Result<()> {
     let _ = (args, config);
-    todo!("implement hash-chain verification")
+    anyhow::bail!("obsidianlog verify is not yet implemented — see the roadmap")
 }

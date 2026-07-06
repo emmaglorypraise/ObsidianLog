@@ -15,5 +15,7 @@ use crate::cli::IngestArgs;
 /// [`obsidianlog_ingest::serve_blocking`].
 pub fn run(args: IngestArgs, config: Option<PathBuf>) -> Result<()> {
     let _ = (args, config);
-    todo!("wire the CLI to obsidianlog_ingest::serve_blocking")
+    anyhow::bail!(
+        "obsidianlog ingest is not yet implemented — run the obsidianlog-ingest binary for now (see the README)"
+    )
 }

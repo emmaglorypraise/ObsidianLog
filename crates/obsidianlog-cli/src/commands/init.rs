@@ -17,5 +17,5 @@ use crate::cli::InitArgs;
 /// `--non-interactive`).
 pub fn run(args: InitArgs, config: Option<PathBuf>) -> Result<()> {
     let _ = (args, config);
-    todo!("implement the `obsidianlog init` setup wizard")
+    anyhow::bail!("obsidianlog init is not yet implemented — see the roadmap")
 }
