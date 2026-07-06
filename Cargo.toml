@@ -10,7 +10,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
-authors = ["emmaglorypraise <emmaglorypraise@gmail.com>"]
+authors = ["Glory Praise Emmanuel <emmaglorypraise@gmail.com>"]
 repository = "https://github.com/emmaglorypraise/ObsidianLog"
 homepage = "https://github.com/emmaglorypraise/ObsidianLog"
 
