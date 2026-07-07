@@ -24,7 +24,7 @@ serde_json.workspace = true
 # Ingest-time fallback timestamp for events without a parseable one (Utc::now).
 chrono = { version = "0.4.39", default-features = false, features = ["serde", "std", "clock"] }
 # Config file parsing.
-toml = "0.8.19"
+toml = "1.1.2"
 # HTTP server for the Vector-compatible `/ingest` endpoint and its runtime.
 axum = "0.8.9"
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "net", "macros", "signal"] }

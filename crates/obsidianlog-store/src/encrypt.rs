@@ -80,10 +80,10 @@ pub fn encrypt_chunk(
     nonce: [u8; NONCE_LEN],
     plaintext: &[u8],
 ) -> Result<Vec<u8>> {
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key.0));
-    let nonce = Nonce::<Aes256Gcm>::from_slice(&nonce);
+    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(key.0));
+    let nonce = Nonce::<Aes256Gcm>::from(nonce);
     cipher
-        .encrypt(nonce, plaintext)
+        .encrypt(&nonce, plaintext)
         .map_err(|_| Error::Crypto("AES-256-GCM encryption failed".into()))
 }
 
@@ -97,10 +97,10 @@ pub fn decrypt_chunk(
     nonce: [u8; NONCE_LEN],
     ciphertext: &[u8],
 ) -> Result<Vec<u8>> {
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key.0));
-    let nonce = Nonce::<Aes256Gcm>::from_slice(&nonce);
+    let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(key.0));
+    let nonce = Nonce::<Aes256Gcm>::from(nonce);
     cipher
-        .decrypt(nonce, ciphertext)
+        .decrypt(&nonce, ciphertext)
         .map_err(|_| Error::Crypto("AES-256-GCM authentication failed".into()))
 }
 

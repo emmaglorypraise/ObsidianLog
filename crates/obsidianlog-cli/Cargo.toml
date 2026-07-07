@@ -26,4 +26,4 @@ anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 # OS keychain for the user-generated encryption key created by `obsidianlog init`.
-keyring = "4.1.2"
+keyring = "4.1.4"
