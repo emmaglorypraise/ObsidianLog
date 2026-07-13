@@ -13,6 +13,9 @@ backtrace.txt
 .DS_Store
 *.swp
 
+# Node artifacts (this is a Rust project — keep stray npm installs out)
+node_modules/
+
 # Claude Code local context — kept out of version control by request.
 /CLAUDE.md
 /.claude/
