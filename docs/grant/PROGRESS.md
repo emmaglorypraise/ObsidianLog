@@ -85,6 +85,7 @@ ingest server.
 | GitHub Actions reusable workflow | _pending_ | Must be publicly available and forkable. |
 | Documentation site | _pending_ | |
 | Live end-to-end demo | _pending_ | |
+| Indexer topology: hosted-default + bring-your-own-indexer | _pending_ | Decision recorded in [ADR-0007](../adr/0007-indexer-topology.md). Implementation: make the ingest server's backend selectable (Sia vs local) + operate a hosted indexer (funded wallet, per-app-key quotas, onboarding). |
 | Example integrations: Grafana + SIEM export workflows | _pending_ | |
 | Final MVP report (usage metrics + developer feedback) | _pending_ | |
 | Public launch | _pending_ | |

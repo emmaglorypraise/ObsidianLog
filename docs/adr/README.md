@@ -15,6 +15,7 @@ We follow the lightweight [Michael Nygard format](https://cognitect.com/blog/201
 - [0004 — Workspace layout and storage abstraction](0004-workspace-layout-and-storage-abstraction.md)
 - [0005 — Storage data model](0005-storage-data-model.md)
 - [0006 — Sia integration (feature-gated, pinned SDK)](0006-sia-integration.md)
+- [0007 — Indexer topology: hosted-default, bring-your-own-indexer](0007-indexer-topology.md) _(Proposed — Month 3)_
 
 ## Adding an ADR
 
