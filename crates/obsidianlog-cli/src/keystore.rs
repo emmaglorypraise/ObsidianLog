@@ -27,7 +27,7 @@ pub enum KeySource {
 /// refuse to overwrite an existing key unless explicitly forced.
 pub fn generate(source: &KeySource) -> Result<EncryptionKey> {
     let _ = source;
-    todo!("generate and persist a new AES-256 key")
+    anyhow::bail!("keystore::generate is not yet implemented")
 }
 
 /// Load the encryption key from `source`.
@@ -36,5 +36,5 @@ pub fn generate(source: &KeySource) -> Result<EncryptionKey> {
 /// permissions are `0600`).
 pub fn load(source: &KeySource) -> Result<EncryptionKey> {
     let _ = source;
-    todo!("load the AES-256 key from its source")
+    anyhow::bail!("keystore::load is not yet implemented")
 }

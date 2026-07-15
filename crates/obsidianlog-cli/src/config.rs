@@ -82,7 +82,7 @@ impl Config {
     /// TODO(impl): use the platform config directory
     /// (e.g. `~/.config/obsidianlog/config.json`).
     pub fn default_path() -> Result<PathBuf> {
-        todo!("resolve the platform default config path")
+        anyhow::bail!("Config::default_path is not yet implemented")
     }
 
     /// Load configuration from `path`, or the default path when `None`.
@@ -91,7 +91,7 @@ impl Config {
     /// URL, non-empty bucket, sane window).
     pub fn load(path: Option<&Path>) -> Result<Self> {
         let _ = path;
-        todo!("load and validate ObsidianLog config")
+        anyhow::bail!("Config::load is not yet implemented")
     }
 
     /// Persist configuration to `path`, or the default path when `None`.
@@ -99,6 +99,6 @@ impl Config {
     /// TODO(impl): serialize as pretty JSON and write atomically.
     pub fn save(&self, path: Option<&Path>) -> Result<()> {
         let _ = path;
-        todo!("persist ObsidianLog config")
+        anyhow::bail!("Config::save is not yet implemented")
     }
 }
