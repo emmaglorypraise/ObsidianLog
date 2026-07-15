@@ -6,7 +6,7 @@
 
 ObsidianLog sits alongside your hot observability stack (Datadog, Grafana, ELK) as a **cold-tier destination**. Logs flow into your active tools for monitoring, then archive to Sia: encrypted before they leave your infrastructure, compressed, hash-chained for tamper-evidence, and queryable at a fraction of the cost — with the keys and contracts owned entirely by you.
 
-> **Status:** the storage pipeline and HTTP ingest server work and are tested end to end — logs come in, get compressed, encrypted, hash-chained, and indexed, and are retrievable and chain-verifiable. The `obsidianlog` CLI (`init` / `query` / `verify`) is in active development; see the [roadmap](#roadmap).
+> **Status:** the storage pipeline and HTTP ingest server work and are tested end to end — logs come in, get compressed, encrypted, hash-chained, and indexed, and are retrievable and chain-verifiable, **including against real Sia** (see [Testing the Sia backend](#testing-the-sia-backend)). The `obsidianlog` CLI (`init` / `query` / `verify`) is in active development; see the [roadmap](#roadmap).
 
 ## Try it
 
@@ -95,6 +95,33 @@ cargo fmt --all -- --check
 Everything builds and tests with no external services. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow and
 [SECURITY.md](SECURITY.md) to report vulnerabilities.
+
+## Testing the Sia backend
+
+By default everything runs against the local backend — no Sia node required. To
+verify the real Sia path end to end, point the `sia`-feature integration test at
+an indexer; the hosted [`sia.storage`](https://sia.storage) (50 GB free tier) is
+the quickest.
+
+1. **Onboard** — derive an `AppKey` from your Sia recovery phrase (read from
+   stdin; never stored, logged, or transmitted):
+
+   ```sh
+   cargo run -p obsidianlog-store --features sia --example onboard
+   ```
+
+   Open the printed approval URL, approve the app, and copy the 64-hex `AppKey`.
+
+2. **Run the end-to-end test:**
+
+   ```sh
+   export OBSIDIANLOG_INDEXD_URL=https://sia.storage
+   export OBSIDIANLOG_APP_KEY=<your-64-hex-key>
+   cargo test -p obsidianlog-store --features sia --test sia -- --nocapture
+   ```
+
+   It ingests records, uploads to Sia, reads them back, and verifies the hash
+   chain. Without the env vars the test skips cleanly, so CI stays Sia-free.
 
 ## Roadmap
 

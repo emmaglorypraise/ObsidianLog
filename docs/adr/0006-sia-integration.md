@@ -61,17 +61,18 @@ future optimization records each chunk's object id in the manifest for direct
 `Sdk::object` fetches.
 
 Connection uses the reconnect path (`Builder::connected(&AppKey)`) with a saved,
-pre-approved `AppKey`; the interactive first-time approval flow is out of scope
-for a backend.
+pre-approved `AppKey`; the interactive first-time approval flow lives in the
+`onboard` example (`--features sia`), not the backend.
 
 ## Consequences
 
 - Default builds/tests/CI stay fast and Sia-free; the pre-1.0 risk is quarantined
   behind one feature and one module.
-- The Sia backend is **compile-verified in CI but not run** there: its
-  integration test is gated behind `--features sia` **and**
-  `OBSIDIANLOG_INDEXD_URL`/`OBSIDIANLOG_APP_KEY`, skipping cleanly without a live
-  indexer.
+- The Sia backend has been **run end-to-end against real Sia** (hosted
+  `sia.storage`): the integration test ingests → uploads → reads back → verifies
+  the hash chain. It stays **unrun in CI** — gated behind `--features sia` **and**
+  `OBSIDIANLOG_INDEXD_URL`/`OBSIDIANLOG_APP_KEY`, so it skips cleanly without a
+  live indexer.
 - **Upgrading deliberately:** bump the `=0.10.0` pin, run
   `cargo build --features sia` and `cargo clippy --all-targets --features sia`,
   re-read the SDK's `CHANGELOG` for breaking changes to the upload/download/object

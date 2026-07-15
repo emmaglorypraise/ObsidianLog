@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `obsidianlog-ingest` — Vector-compatible HTTP ingest service (axum/tokio).
   - `obsidianlog-cli` — the `obsidianlog` binary (`init`, `ingest`, `query`,
     `verify`), plus config loading and the OS-keychain key store.
-  - All feature logic is stubbed with `todo!()` / `TODO(impl)` markers.
+  - The `obsidianlog` CLI subcommands and key/config plumbing are stubbed —
+    they return a clear "not yet implemented" error, pending Month 2.
 - Mock-first design: default builds and tests run entirely against
   `LocalBackend` with no Sia node; the pre-1.0 Sia SDK is confined to the
   `sia`-feature-gated backend.
@@ -87,8 +88,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cargo feature (default builds/tests stay Sia-free). The SDK is content-
   addressed, so our `(service, window)` paths are stored in object metadata and
   resolved by scanning `object_events`. `sia_storage` is pinned to `=0.10.0` and
-  uses rustls; an env-gated integration test (`OBSIDIANLOG_INDEXD_URL`) reuses the
-  milestone end-to-end assertions. See ADR-0006.
+  uses rustls; an env-gated integration test
+  (`OBSIDIANLOG_INDEXD_URL`/`OBSIDIANLOG_APP_KEY`) reuses the milestone
+  end-to-end assertions and has been **run successfully against real Sia**
+  (`sia.storage`). See ADR-0006.
+- `obsidianlog-store` Sia app onboarding: a real, stable App ID in `APP_META`,
+  and an `onboard` example (`--features sia`) that runs the indexer approval flow
+  to export an `AppKey` (recovery phrase read from stdin; never stored). See
+  ADR-0006.
 - `obsidianlog-ingest`: a Vector-compatible HTTP ingest server (axum/tokio).
   `POST /ingest` accepts a JSON array of events (or NDJSON), parses tolerantly,
   and archives via `ArchiveEngine` — **write-then-ack** (`200` only after a
@@ -98,5 +105,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `examples/vector.toml`. Integration tests boot the server on an ephemeral port,
   POST over reqwest (rustls), and verify the archived batch. The workspace now has
   **zero ignored tests**.
+
+### Changed
+
+- Bumped dependencies to current releases: `aes-gcm` 0.11, `toml` 1.x, `zeroize`
+  1.9, `keyring` 4.1.4.
+- Recorded ADR-0007 (indexer topology: hosted-default, bring-your-own-indexer).
 
 [Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/commits/main
