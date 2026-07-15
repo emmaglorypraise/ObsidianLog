@@ -44,6 +44,11 @@ tempfile = "3.23.0"
 # Building record timestamps in the end-to-end integration tests.
 chrono.workspace = true
 
+# One-time app onboarding against a Sia indexer; needs the Sia SDK.
+[[example]]
+name = "onboard"
+required-features = ["sia"]
+
 [features]
 # Default builds/tests use the in-process LocalBackend — no Sia node (ADR-0004).
 default = []

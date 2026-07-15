@@ -36,10 +36,13 @@ use obsidianlog_core::manifest::Manifest;
 
 /// Application metadata registered with the indexer.
 ///
-/// The `id` is a placeholder — a real deployment registers an ObsidianLog app and
-/// substitutes its assigned id. `name`/`description`/etc. are display-only.
-const APP_META: AppMetadata = AppMetadata {
-    id: app_id!("0000000000000000000000000000000000000000000000000000000000000000"),
+/// `id` is ObsidianLog's stable App ID (generated once with `openssl rand -hex
+/// 32`). It is **public, not a secret** — it is an input to the per-user app-key
+/// derivation, so the onboarding tool and this backend must use the *same* value
+/// (see the `onboard` example). `name`/`description`/etc. are display-only in the
+/// approval UI.
+pub const APP_META: AppMetadata = AppMetadata {
+    id: app_id!("599c3cd5a89ba1a569c2f3771a1d1b066b139dfde888c74e60d7885a54d49ae6"),
     name: "ObsidianLog",
     description: "Long-term, tamper-evident operational log archival on Sia.",
     service_url: "https://github.com/emmaglorypraise/ObsidianLog",
