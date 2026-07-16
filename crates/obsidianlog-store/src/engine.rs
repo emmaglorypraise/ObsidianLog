@@ -144,10 +144,9 @@ impl<B: StorageBackend> ArchiveEngine<B> {
             let chunk_ref = chunk.chunk_ref();
             let index = build_index(chunk_ref.clone(), &bucket.records);
 
-            // Durable per-window object writes; the manifest is advanced once,
-            // after the loop.
-            self.backend.put_chunk(&chunk).await?;
-            self.backend.put_index(&index).await?;
+            // Durable per-window archive write (chunk + index); the manifest is
+            // advanced once, after the loop.
+            self.backend.put_archive(&chunk, &index).await?;
 
             heads.insert(bucket.service.clone(), (hash, sequence + 1));
             new_refs.entry(bucket.service).or_default().push(chunk_ref);
@@ -340,14 +339,11 @@ mod tests {
 
     #[async_trait::async_trait]
     impl StorageBackend for CountingBackend {
-        async fn put_chunk(&self, chunk: &Chunk) -> Result<()> {
-            self.inner.put_chunk(chunk).await
+        async fn put_archive(&self, chunk: &Chunk, index: &ServiceWindowIndex) -> Result<()> {
+            self.inner.put_archive(chunk, index).await
         }
         async fn get_chunk(&self, service: &str, window: &str) -> Result<Chunk> {
             self.inner.get_chunk(service, window).await
-        }
-        async fn put_index(&self, index: &ServiceWindowIndex) -> Result<()> {
-            self.inner.put_index(index).await
         }
         async fn get_index(&self, service: &str, window: &str) -> Result<ServiceWindowIndex> {
             self.inner.get_index(service, window).await
