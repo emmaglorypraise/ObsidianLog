@@ -8,27 +8,29 @@
 //!
 //! Each chunk's `prev_hash` and nonce derive from its service's current chain
 //! head and sequence number, so two writers for the *same* service must not
-//! interleave (that would fork the chain and, fatally, reuse a nonce). The engine
-//! therefore holds a **per-service async lock** across the whole
-//! read-head → write-chunk → update-manifest sequence. A separate **global lock**
-//! is held only around the manifest's read-modify-write, so concurrent writers
-//! for *different* services can't clobber the shared `manifest.json`. Different
-//! services run in parallel; a single service is strictly serialized (ADR-0003).
+//! interleave (that would fork the chain and, fatally, reuse a nonce). A batch
+//! therefore holds the **per-service async lock** of every service it touches for
+//! its whole duration. Chunk and index objects are written per window, but the
+//! shared `manifest.json` is advanced **once per batch** (ADR-0008): under a
+//! separate **global lock** the engine re-reads the manifest, overlays the
+//! batch's per-service deltas, and writes it once — so concurrent batches for
+//! *different* services can't clobber each other. Different services run in
+//! parallel; a single service is strictly serialized (ADR-0003).
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex as StdMutex};
 
 use tokio::sync::Mutex as AsyncMutex;
 
 use obsidianlog_core::backend::StorageBackend;
-use obsidianlog_core::chunk::{Chunk, ChunkHeader};
+use obsidianlog_core::chunk::{Chunk, ChunkHeader, ChunkRef};
 use obsidianlog_core::error::{Error, Result};
 use obsidianlog_core::manifest::{Manifest, ManifestServiceChain};
 use obsidianlog_core::record::{LogBatch, LogRecord};
 use obsidianlog_core::types::GENESIS;
 
 use crate::chain::compute_chunk_hash;
-use crate::chunking::{Bucket, DEFAULT_WINDOW_SECS, chunk_batch};
+use crate::chunking::{DEFAULT_WINDOW_SECS, chunk_batch};
 use crate::compress::{DEFAULT_LEVEL, compress, decompress};
 use crate::encrypt::{EncryptionKey, decrypt_chunk, derive_nonce, encrypt_chunk};
 use crate::index::build_index;
@@ -78,77 +80,94 @@ impl<B: StorageBackend> ArchiveEngine<B> {
         &self.backend
     }
 
-    /// Ingest a batch: group into `(service, window)` buckets and archive each,
-    /// per-service serialized. Returns only after every write is durable.
+    /// Ingest a batch: group into `(service, window)` buckets, archive each, and
+    /// advance the manifest **once** for the whole batch. Per-service serialized;
+    /// returns only after every write (including the manifest) is durable.
     pub async fn ingest_batch(&self, batch: LogBatch) -> Result<()> {
-        for bucket in chunk_batch(&batch, self.window_secs) {
-            self.ingest_bucket(bucket).await?;
+        let buckets = chunk_batch(&batch, self.window_secs);
+        if buckets.is_empty() {
+            return Ok(());
         }
-        Ok(())
-    }
 
-    async fn ingest_bucket(&self, bucket: Bucket) -> Result<()> {
-        // Serialize all writers for this service for the whole sequence below.
-        let lock = self.service_lock(&bucket.service);
-        let _service_guard = lock.lock().await;
+        // Hold each touched service's lock for the whole batch so its chain can't
+        // fork and its nonces can't be reused (ADR-0003). Sorted acquisition
+        // order avoids deadlock between batches with overlapping services.
+        let services: BTreeSet<String> = buckets.iter().map(|b| b.service.clone()).collect();
+        let mut _guards = Vec::with_capacity(services.len());
+        for service in &services {
+            _guards.push(self.service_lock(service).lock_owned().await);
+        }
 
-        // (a) Read this service's chain head + next sequence. Safe without the
-        // global lock: only this writer (holding the per-service lock) mutates
-        // this service's chain.
-        let manifest = self.read_manifest_or_default().await?;
-        let (prev_hash, sequence) = match manifest.services.get(&bucket.service) {
-            Some(chain) => (chain.head_hash, chain.next_sequence),
-            None => (GENESIS, 0),
-        };
+        // Seed each service's chain head + next sequence from the current
+        // manifest, then chain forward in memory across the batch's buckets.
+        let seed = self.read_manifest_or_default().await?;
+        let mut heads: HashMap<String, ([u8; 32], u64)> = HashMap::new();
+        let mut new_refs: HashMap<String, Vec<ChunkRef>> = HashMap::new();
 
-        // (b) Serialize + compress the records.
-        let plaintext = serde_json::to_vec(&bucket.records)?;
-        let uncompressed_len = plaintext.len() as u64;
-        let compressed = compress(&plaintext, self.compression_level)?;
+        for bucket in buckets {
+            let (prev_hash, sequence) = match heads.get(&bucket.service) {
+                Some(&head) => head,
+                None => match seed.services.get(&bucket.service) {
+                    Some(chain) => (chain.head_hash, chain.next_sequence),
+                    None => (GENESIS, 0),
+                },
+            };
 
-        // (c) Derive the nonce from (service, sequence) and encrypt.
-        let nonce = derive_nonce(&bucket.service, sequence);
-        let ciphertext = encrypt_chunk(&self.key, nonce, &compressed)?;
+            // Serialize + compress, derive the nonce, and encrypt.
+            let plaintext = serde_json::to_vec(&bucket.records)?;
+            let uncompressed_len = plaintext.len() as u64;
+            let compressed = compress(&plaintext, self.compression_level)?;
+            let nonce = derive_nonce(&bucket.service, sequence);
+            let ciphertext = encrypt_chunk(&self.key, nonce, &compressed)?;
 
-        // (d) Assemble the chunk (prev_hash = current head) and hash it.
-        let created_at = bucket
-            .records
-            .iter()
-            .map(|r| r.timestamp)
-            .max()
-            .expect("chunk_batch never yields an empty bucket");
-        let chunk = Chunk {
-            header: ChunkHeader {
-                service: bucket.service.clone(),
-                time_window: bucket.window.clone(),
-                sequence,
-                prev_hash,
-                nonce,
-                created_at,
-                record_count: bucket.records.len() as u32,
-                uncompressed_len,
-            },
-            ciphertext,
-        };
-        let hash = compute_chunk_hash(&chunk);
-        let chunk_ref = chunk.chunk_ref();
+            // Assemble + hash the chunk (prev_hash = this service's current head).
+            let created_at = bucket
+                .records
+                .iter()
+                .map(|r| r.timestamp)
+                .max()
+                .expect("chunk_batch never yields an empty bucket");
+            let chunk = Chunk {
+                header: ChunkHeader {
+                    service: bucket.service.clone(),
+                    time_window: bucket.window.clone(),
+                    sequence,
+                    prev_hash,
+                    nonce,
+                    created_at,
+                    record_count: bucket.records.len() as u32,
+                    uncompressed_len,
+                },
+                ciphertext,
+            };
+            let hash = compute_chunk_hash(&chunk);
+            let chunk_ref = chunk.chunk_ref();
+            let index = build_index(chunk_ref.clone(), &bucket.records);
 
-        // (e) Build the window's metadata index.
-        let index = build_index(chunk_ref.clone(), &bucket.records);
+            // Durable per-window object writes; the manifest is advanced once,
+            // after the loop.
+            self.backend.put_chunk(&chunk).await?;
+            self.backend.put_index(&index).await?;
 
-        // (f) Durable writes: chunk + index, then atomically advance the manifest.
-        self.backend.put_chunk(&chunk).await?;
-        self.backend.put_index(&index).await?;
+            heads.insert(bucket.service.clone(), (hash, sequence + 1));
+            new_refs.entry(bucket.service).or_default().push(chunk_ref);
+        }
 
+        // One manifest write for the whole batch: under the global lock, re-read
+        // (so concurrent batches for other services aren't lost), overlay this
+        // batch's per-service deltas, and write once. Ack follows durability.
         let _manifest_guard = self.manifest_lock.lock().await;
         let mut manifest = self.read_manifest_or_default().await?;
-        let chain = manifest
-            .services
-            .entry(bucket.service.clone())
-            .or_insert_with(|| ManifestServiceChain::new(&bucket.service));
-        chain.head_hash = hash;
-        chain.next_sequence += 1;
-        chain.chunks.push(chunk_ref);
+        for (service, (head, next_sequence)) in heads {
+            let refs = new_refs.remove(&service).unwrap_or_default();
+            let chain = manifest
+                .services
+                .entry(service.clone())
+                .or_insert_with(|| ManifestServiceChain::new(&service));
+            chain.head_hash = head;
+            chain.next_sequence = next_sequence;
+            chain.chunks.extend(refs);
+        }
         self.backend.write_manifest(&manifest).await?;
         Ok(())
     }
@@ -198,7 +217,10 @@ mod tests {
     use crate::backend::LocalBackend;
     use crate::chain::verify_chain;
     use chrono::{DateTime, Utc};
+    use obsidianlog_core::backend::TimeRange;
+    use obsidianlog_core::index::ServiceWindowIndex;
     use std::collections::BTreeSet;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn engine(dir: &tempfile::TempDir) -> ArchiveEngine<LocalBackend> {
         let backend = LocalBackend::new(dir.path(), "obsidianlog");
@@ -308,5 +330,79 @@ mod tests {
         assert_eq!(nonces.len(), 12);
         let total: u32 = chunks.iter().map(|c| c.header.record_count).sum();
         assert_eq!(total, 12 * 3);
+    }
+
+    /// A backend that counts `write_manifest` calls over a real `LocalBackend`.
+    struct CountingBackend {
+        inner: LocalBackend,
+        manifest_writes: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl StorageBackend for CountingBackend {
+        async fn put_chunk(&self, chunk: &Chunk) -> Result<()> {
+            self.inner.put_chunk(chunk).await
+        }
+        async fn get_chunk(&self, service: &str, window: &str) -> Result<Chunk> {
+            self.inner.get_chunk(service, window).await
+        }
+        async fn put_index(&self, index: &ServiceWindowIndex) -> Result<()> {
+            self.inner.put_index(index).await
+        }
+        async fn get_index(&self, service: &str, window: &str) -> Result<ServiceWindowIndex> {
+            self.inner.get_index(service, window).await
+        }
+        async fn list_chunks(
+            &self,
+            service: &str,
+            range: Option<TimeRange>,
+        ) -> Result<Vec<ChunkRef>> {
+            self.inner.list_chunks(service, range).await
+        }
+        async fn read_manifest(&self) -> Result<Manifest> {
+            self.inner.read_manifest().await
+        }
+        async fn write_manifest(&self, manifest: &Manifest) -> Result<()> {
+            self.manifest_writes.fetch_add(1, Ordering::SeqCst);
+            self.inner.write_manifest(manifest).await
+        }
+    }
+
+    #[tokio::test]
+    async fn multi_window_batch_writes_manifest_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend = CountingBackend {
+            inner: LocalBackend::new(dir.path(), "obsidianlog"),
+            manifest_writes: AtomicUsize::new(0),
+        };
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+
+        // One batch whose records span three windows across two services.
+        let mut records = Vec::new();
+        let mut id = 0;
+        for service in ["api", "web"] {
+            for hour in 0..3i64 {
+                for _ in 0..4 {
+                    records.push(record(service, id, hour * 3600));
+                    id += 1;
+                }
+            }
+        }
+        engine.ingest_batch(LogBatch(records)).await.unwrap();
+
+        // Coalesced: exactly one manifest write for the whole batch, not per window.
+        assert_eq!(
+            engine.backend().manifest_writes.load(Ordering::SeqCst),
+            1,
+            "the manifest must be written once per batch"
+        );
+
+        // Everything still round-trips with intact chains.
+        for service in ["api", "web"] {
+            let refs = engine.backend().list_chunks(service, None).await.unwrap();
+            assert_eq!(refs.len(), 3, "one chunk per window");
+            let chunks = engine.service_chunks(service).await.unwrap();
+            assert!(verify_chain(&chunks).is_ok(), "chain must be intact");
+        }
     }
 }
