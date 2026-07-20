@@ -76,6 +76,8 @@ async fn sia_end_to_end_when_indexd_available() {
     })
     .await
     .expect("connect to indexd");
+    eprintln!("[sia] connected; bucket = {bucket}");
+    let started = std::time::Instant::now();
     let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), bucket);
 
     // Ingest a few batches across two services, each in a distinct window.
@@ -87,11 +89,17 @@ async fn sia_end_to_end_when_indexd_available() {
             let b = batch(service, hour, id, 4);
             expected.entry(service).or_default().extend(ids(&b.0));
             id += 4;
+            eprintln!("[sia] ingesting {service} window {hour} ...");
             engine.ingest_batch(b).await.expect("ingest");
+            eprintln!(
+                "[sia]   ingested ({:.1}s elapsed)",
+                started.elapsed().as_secs_f64()
+            );
         }
     }
 
     for service in ["api", "web"] {
+        eprintln!("[sia] reading back {service} ...");
         let refs = engine
             .backend()
             .list_chunks(service, None)
@@ -110,5 +118,12 @@ async fn sia_end_to_end_when_indexd_available() {
 
         let chunks = engine.service_chunks(service).await.expect("chunks");
         assert!(verify_chain(&chunks).is_ok(), "chain must verify");
+        eprintln!(
+            "[sia]   {service}: {} records verified, chain intact ({:.1}s elapsed)",
+            got.len(),
+            started.elapsed().as_secs_f64()
+        );
     }
+
+    eprintln!("[sia] all done in {:.1}s", started.elapsed().as_secs_f64());
 }
