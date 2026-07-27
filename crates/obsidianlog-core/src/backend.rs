@@ -28,25 +28,28 @@ pub struct TimeRange {
 /// Durable, append-only storage for chunks, indexes, and the manifest.
 ///
 /// Implemented by `obsidianlog_store::backend::LocalBackend` (the default) and,
-/// with the `sia` feature, `obsidianlog_store::backend::SiaBackend`. Objects are
-/// stored under the fixed layout (`chunks/...`, `index/...`, `manifest/...`).
+/// with the `sia` feature, `obsidianlog_store::backend::SiaBackend`. A backend
+/// may co-locate a chunk and its index (see the Sia backend) or keep them apart
+/// (the local backend); the manifest lives at the bucket root.
 ///
 /// ## Durability contract
 ///
-/// Every write method (`put_chunk`, `put_index`, `write_manifest`) MUST make the
-/// data durable — fsync'd to disk, or acknowledged by the storage network —
-/// **before** returning `Ok(())`. Returning `Ok` is a promise that the data will
-/// survive a crash. Writes are append-only: a stored chunk is never modified.
+/// Every write method (`put_archive`, `write_manifest`) MUST make the data
+/// durable — fsync'd to disk, or acknowledged by the storage network — **before**
+/// returning `Ok(())`. Returning `Ok` is a promise that the data will survive a
+/// crash. Writes are append-only: a stored chunk is never modified.
 #[async_trait]
 pub trait StorageBackend: Send + Sync {
-    /// Durably store `chunk` at its `(service, time_window)` location.
-    async fn put_chunk(&self, chunk: &Chunk) -> Result<()>;
+    /// Durably store a `chunk` together with its metadata `index` as one archive
+    /// unit for its `(service, window)`.
+    ///
+    /// Backends choose the physical layout — separate objects, or a single
+    /// content-addressed object carrying the index in its metadata (the Sia
+    /// backend) — but **both** parts MUST be durable before returning `Ok`.
+    async fn put_archive(&self, chunk: &Chunk, index: &ServiceWindowIndex) -> Result<()>;
 
     /// Fetch the chunk stored for `(service, window)`.
     async fn get_chunk(&self, service: &str, window: &str) -> Result<Chunk>;
-
-    /// Durably store the metadata index for its `(service, window)`.
-    async fn put_index(&self, index: &ServiceWindowIndex) -> Result<()>;
 
     /// Fetch the metadata index for `(service, window)`.
     async fn get_index(&self, service: &str, window: &str) -> Result<ServiceWindowIndex>;

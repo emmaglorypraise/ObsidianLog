@@ -29,6 +29,8 @@ zeroize.workspace = true
 chrono.workspace = true
 # Async locks (tokio sync) for the ArchiveEngine's per-service serialization.
 tokio = { version = "1.52.3", features = ["sync"] }
+# Bounded-concurrency archive uploads in the ArchiveEngine (buffer_unordered).
+futures-util = { version = "0.3.31", default-features = false, features = ["std"] }
 
 # Sia integration, behind the `sia` feature. Pinned exact: sia_storage is pre-1.0
 # and breaks on minor bumps (see ADR-0006); it brings rustls (no native-tls).

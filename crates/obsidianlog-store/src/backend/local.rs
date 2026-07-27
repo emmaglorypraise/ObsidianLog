@@ -118,20 +118,19 @@ impl LocalBackend {
 
 #[async_trait]
 impl StorageBackend for LocalBackend {
-    async fn put_chunk(&self, chunk: &Chunk) -> Result<()> {
-        let path = self.chunk_path(&chunk.header.service, &chunk.header.time_window)?;
-        atomic_write(&path, &encode_chunk(chunk)?)
+    async fn put_archive(&self, chunk: &Chunk, index: &ServiceWindowIndex) -> Result<()> {
+        // No per-object floor on a filesystem, so keep the chunk and its index as
+        // separate files (cheap independent reads); both are durable on return.
+        let chunk_path = self.chunk_path(&chunk.header.service, &chunk.header.time_window)?;
+        atomic_write(&chunk_path, &encode_chunk(chunk)?)?;
+        let index_path = self.index_path(&index.service, &index.window)?;
+        atomic_write(&index_path, &serde_json::to_vec(index)?)
     }
 
     async fn get_chunk(&self, service: &str, window: &str) -> Result<Chunk> {
         let path = self.chunk_path(service, window)?;
         let bytes = read_file(&path, || format!("chunk {service}/{window}"))?;
         decode_chunk(&bytes)
-    }
-
-    async fn put_index(&self, index: &ServiceWindowIndex) -> Result<()> {
-        let path = self.index_path(&index.service, &index.window)?;
-        atomic_write(&path, &serde_json::to_vec(index)?)
     }
 
     async fn get_index(&self, service: &str, window: &str) -> Result<ServiceWindowIndex> {
@@ -278,7 +277,10 @@ mod tests {
     async fn chunk_put_get_round_trips() {
         let (_dir, backend) = backend();
         let original = chunk("api", "2026-06-29-15", 0, &[0xDE, 0xAD, 0xBE, 0xEF]);
-        backend.put_chunk(&original).await.unwrap();
+        backend
+            .put_archive(&original, &index("api", "2026-06-29-15", 0, 100, 200))
+            .await
+            .unwrap();
         let fetched = backend.get_chunk("api", "2026-06-29-15").await.unwrap();
         assert_eq!(fetched, original);
     }
@@ -287,7 +289,10 @@ mod tests {
     async fn index_put_get_round_trips() {
         let (_dir, backend) = backend();
         let original = index("api", "2026-06-29-15", 0, 100, 200);
-        backend.put_index(&original).await.unwrap();
+        backend
+            .put_archive(&chunk("api", "2026-06-29-15", 0, &[0xAB]), &original)
+            .await
+            .unwrap();
         let fetched = backend.get_index("api", "2026-06-29-15").await.unwrap();
         assert_eq!(fetched, original);
     }
@@ -326,15 +331,24 @@ mod tests {
         let (_dir, backend) = backend();
         // api: two windows; web: one window.
         backend
-            .put_index(&index("api", "2026-06-29-15", 0, 100, 200))
+            .put_archive(
+                &chunk("api", "2026-06-29-15", 0, &[0xAB]),
+                &index("api", "2026-06-29-15", 0, 100, 200),
+            )
             .await
             .unwrap();
         backend
-            .put_index(&index("api", "2026-06-29-16", 1, 4000, 4100))
+            .put_archive(
+                &chunk("api", "2026-06-29-16", 1, &[0xAB]),
+                &index("api", "2026-06-29-16", 1, 4000, 4100),
+            )
             .await
             .unwrap();
         backend
-            .put_index(&index("web", "2026-06-29-15", 0, 100, 200))
+            .put_archive(
+                &chunk("web", "2026-06-29-15", 0, &[0xAB]),
+                &index("web", "2026-06-29-15", 0, 100, 200),
+            )
             .await
             .unwrap();
 

@@ -8,20 +8,24 @@
 //!
 //! `sia_storage` is **content-addressed**: uploads return an [`Object`] keyed by
 //! a derived hash, and there is no get-by-path. Each object, however, carries an
-//! arbitrary `metadata: Vec<u8>` blob. We store each object's bucket-relative
-//! path (`<bucket>/chunks/<service>/<window>.bin`, etc.) in that metadata, and
-//! resolve reads by scanning the indexer's object list (`object_events`) for a
-//! matching path. This keeps `LocalBackend` and `SiaBackend` interchangeable
-//! behind [`StorageBackend`].
+//! arbitrary `metadata: Vec<u8>` blob. We store a small JSON envelope there — the
+//! object's bucket-relative path (`<bucket>/chunks/<service>/<window>.bin`, etc.)
+//! plus, for archive objects, the window's index — and resolve reads by scanning
+//! the indexer's object list (`object_events`) for a matching path. A chunk and
+//! its index are therefore **one object** (ADR-0008): the ciphertext is the body
+//! and the index rides in metadata, so `list_chunks`/`get_index` read the index
+//! without downloading any bodies. This keeps `LocalBackend` and `SiaBackend`
+//! interchangeable behind [`StorageBackend`].
 //!
-//! Reads are therefore `O(objects)` per lookup — acceptable for the pre-1.0
-//! integration; a future optimization is to record each chunk's object id in the
-//! manifest and fetch it directly with `Sdk::object`. Objects are also
-//! encrypted by the SDK, on top of our own AES-256-GCM (defense in depth).
+//! Lookups still scan `object_events` (`O(objects)`); recording each chunk's
+//! object id in the manifest for direct `Sdk::object` fetch is a future
+//! optimization. Objects are also encrypted by the SDK, on top of our own
+//! AES-256-GCM (defense in depth).
 
 use std::io::Cursor;
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use sia_storage::{
     AppKey, AppMetadata, Builder, DownloadOptions, Object, Sdk, UploadOptions, app_id,
 };
@@ -67,6 +71,18 @@ pub struct SiaBackend {
     bucket: String,
 }
 
+/// The JSON envelope stored in each object's `metadata` blob: the object's
+/// logical path (Sia is content-addressed, so we match on this) and, for archive
+/// objects, the window's index — letting listing and prefilter read the index
+/// without downloading the body. If an index ever exceeds Sia's metadata limit,
+/// fall back to a separate index object (ADR-0008).
+#[derive(Serialize, Deserialize)]
+struct ObjectMeta {
+    path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    index: Option<ServiceWindowIndex>,
+}
+
 impl SiaBackend {
     /// Connect to the indexer using a previously approved [`AppKey`].
     ///
@@ -97,18 +113,14 @@ impl SiaBackend {
         self.object_path("chunks", service, window, "bin")
     }
 
-    fn index_path(&self, service: &str, window: &str) -> String {
-        self.object_path("index", service, window, "idx")
-    }
-
     fn manifest_path(&self) -> String {
         format!("{}/manifest.json", self.bucket)
     }
 
-    /// Upload `bytes` as an object whose metadata records `path`, then pin it.
-    async fn put_object(&self, path: String, bytes: Vec<u8>) -> Result<()> {
+    /// Upload `bytes` as an object carrying `meta` in its metadata blob, then pin.
+    async fn put_object(&self, meta: &ObjectMeta, bytes: Vec<u8>) -> Result<()> {
         let mut object = Object::default();
-        object.metadata = path.into_bytes();
+        object.metadata = serde_json::to_vec(meta)?;
         let object = self
             .sdk
             .upload(object, Cursor::new(bytes), UploadOptions::default())
@@ -121,7 +133,12 @@ impl SiaBackend {
         Ok(())
     }
 
-    /// Find the newest non-deleted object whose metadata equals `path`.
+    /// Parse an object's [`ObjectMeta`] from its metadata blob, if present.
+    fn object_meta(object: &Object) -> Option<ObjectMeta> {
+        serde_json::from_slice(&object.metadata).ok()
+    }
+
+    /// Find the newest non-deleted object whose metadata path equals `path`.
     async fn find_object(&self, path: &str) -> Result<Option<Object>> {
         let events = self
             .sdk
@@ -135,7 +152,7 @@ impl SiaBackend {
                 continue;
             }
             let Some(object) = event.object else { continue };
-            if object.metadata.as_slice() != path.as_bytes() {
+            if Self::object_meta(&object).is_none_or(|m| m.path != path) {
                 continue;
             }
             let newer = best
@@ -173,9 +190,14 @@ impl SiaBackend {
 
 #[async_trait]
 impl StorageBackend for SiaBackend {
-    async fn put_chunk(&self, chunk: &Chunk) -> Result<()> {
-        let path = self.chunk_path(&chunk.header.service, &chunk.header.time_window);
-        self.put_object(path, encode_chunk(chunk)?).await
+    async fn put_archive(&self, chunk: &Chunk, index: &ServiceWindowIndex) -> Result<()> {
+        // One object per window: the ciphertext frame is the body; the index
+        // rides in the object metadata so reads/lists never download the body.
+        let meta = ObjectMeta {
+            path: self.chunk_path(&chunk.header.service, &chunk.header.time_window),
+            index: Some(index.clone()),
+        };
+        self.put_object(&meta, encode_chunk(chunk)?).await
     }
 
     async fn get_chunk(&self, service: &str, window: &str) -> Result<Chunk> {
@@ -186,21 +208,18 @@ impl StorageBackend for SiaBackend {
         decode_chunk(&bytes)
     }
 
-    async fn put_index(&self, index: &ServiceWindowIndex) -> Result<()> {
-        let path = self.index_path(&index.service, &index.window);
-        self.put_object(path, serde_json::to_vec(index)?).await
-    }
-
     async fn get_index(&self, service: &str, window: &str) -> Result<ServiceWindowIndex> {
-        let path = self.index_path(service, window);
-        let bytes = self
-            .get_object(&path, || format!("index {service}/{window}"))
-            .await?;
-        Ok(serde_json::from_slice(&bytes)?)
+        // The index lives in the chunk object's metadata — no body download.
+        let path = self.chunk_path(service, window);
+        self.find_object(&path)
+            .await?
+            .and_then(|o| Self::object_meta(&o))
+            .and_then(|m| m.index)
+            .ok_or_else(|| Error::NotFound(format!("index {service}/{window}")))
     }
 
     async fn list_chunks(&self, service: &str, range: Option<TimeRange>) -> Result<Vec<ChunkRef>> {
-        let prefix = format!("{}/index/{service}/", self.bucket);
+        let prefix = format!("{}/chunks/{service}/", self.bucket);
         let events = self
             .sdk
             .object_events(None, None)
@@ -213,14 +232,13 @@ impl StorageBackend for SiaBackend {
                 continue;
             }
             let Some(object) = event.object else { continue };
-            let Ok(meta) = std::str::from_utf8(&object.metadata) else {
+            let Some(meta) = Self::object_meta(&object) else {
                 continue;
             };
-            if !meta.starts_with(&prefix) {
+            if !meta.path.starts_with(&prefix) {
                 continue;
             }
-            let bytes = self.read_object(&object).await?;
-            let index: ServiceWindowIndex = serde_json::from_slice(&bytes)?;
+            let Some(index) = meta.index else { continue };
             if range.is_none_or(|r| overlaps(&index, r)) {
                 refs.push(index.chunk);
             }
@@ -237,7 +255,10 @@ impl StorageBackend for SiaBackend {
     }
 
     async fn write_manifest(&self, manifest: &Manifest) -> Result<()> {
-        self.put_object(self.manifest_path(), serde_json::to_vec(manifest)?)
-            .await
+        let meta = ObjectMeta {
+            path: self.manifest_path(),
+            index: None,
+        };
+        self.put_object(&meta, serde_json::to_vec(manifest)?).await
     }
 }

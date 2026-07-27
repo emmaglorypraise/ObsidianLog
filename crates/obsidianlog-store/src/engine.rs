@@ -10,21 +10,24 @@
 //! head and sequence number, so two writers for the *same* service must not
 //! interleave (that would fork the chain and, fatally, reuse a nonce). A batch
 //! therefore holds the **per-service async lock** of every service it touches for
-//! its whole duration. Chunk and index objects are written per window, but the
-//! shared `manifest.json` is advanced **once per batch** (ADR-0008): under a
-//! separate **global lock** the engine re-reads the manifest, overlays the
-//! batch's per-service deltas, and writes it once — so concurrent batches for
-//! *different* services can't clobber each other. Different services run in
-//! parallel; a single service is strictly serialized (ADR-0003).
+//! its whole duration. Each window's chunk+index archive is built serially (so
+//! the hash chain links in order), but the archives are **uploaded concurrently**
+//! (bounded fan-out); the shared `manifest.json` is advanced **once per batch**
+//! (ADR-0008): under a separate **global lock** the engine re-reads the manifest,
+//! overlays the batch's per-service deltas, and writes it once — so concurrent
+//! batches for *different* services can't clobber each other. Different services
+//! run in parallel; a single service is strictly serialized (ADR-0003).
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex as StdMutex};
 
+use futures_util::stream::{self, StreamExt};
 use tokio::sync::Mutex as AsyncMutex;
 
 use obsidianlog_core::backend::StorageBackend;
 use obsidianlog_core::chunk::{Chunk, ChunkHeader, ChunkRef};
 use obsidianlog_core::error::{Error, Result};
+use obsidianlog_core::index::ServiceWindowIndex;
 use obsidianlog_core::manifest::{Manifest, ManifestServiceChain};
 use obsidianlog_core::record::{LogBatch, LogRecord};
 use obsidianlog_core::types::GENESIS;
@@ -34,6 +37,9 @@ use crate::chunking::{DEFAULT_WINDOW_SECS, chunk_batch};
 use crate::compress::{DEFAULT_LEVEL, compress, decompress};
 use crate::encrypt::{EncryptionKey, decrypt_chunk, derive_nonce, encrypt_chunk};
 use crate::index::build_index;
+
+/// Max archives uploaded concurrently per batch (bounds fan-out to the backend).
+const MAX_CONCURRENT_UPLOADS: usize = 8;
 
 /// Ties the storage pipeline together over a [`StorageBackend`].
 pub struct ArchiveEngine<B: StorageBackend> {
@@ -103,6 +109,7 @@ impl<B: StorageBackend> ArchiveEngine<B> {
         let seed = self.read_manifest_or_default().await?;
         let mut heads: HashMap<String, ([u8; 32], u64)> = HashMap::new();
         let mut new_refs: HashMap<String, Vec<ChunkRef>> = HashMap::new();
+        let mut archives: Vec<(Chunk, ServiceWindowIndex)> = Vec::with_capacity(buckets.len());
 
         for bucket in buckets {
             let (prev_hash, sequence) = match heads.get(&bucket.service) {
@@ -144,13 +151,26 @@ impl<B: StorageBackend> ArchiveEngine<B> {
             let chunk_ref = chunk.chunk_ref();
             let index = build_index(chunk_ref.clone(), &bucket.records);
 
-            // Durable per-window object writes; the manifest is advanced once,
-            // after the loop.
-            self.backend.put_chunk(&chunk).await?;
-            self.backend.put_index(&index).await?;
-
             heads.insert(bucket.service.clone(), (hash, sequence + 1));
             new_refs.entry(bucket.service).or_default().push(chunk_ref);
+            archives.push((chunk, index));
+        }
+
+        // Upload the batch's archives concurrently (bounded fan-out). Each
+        // archive's chain links are already baked in, so upload order doesn't
+        // matter; the manifest is advanced only after every upload is durable.
+        // Each future *owns* its (chunk, index), so it borrows nothing from the
+        // collection — only `self.backend` — which avoids a higher-ranked
+        // lifetime bound the combinator can't satisfy for borrowed items.
+        let uploads: Vec<Result<()>> =
+            stream::iter(archives.into_iter().map(|(chunk, index)| async move {
+                self.backend.put_archive(&chunk, &index).await
+            }))
+            .buffer_unordered(MAX_CONCURRENT_UPLOADS)
+            .collect()
+            .await;
+        for upload in uploads {
+            upload?;
         }
 
         // One manifest write for the whole batch: under the global lock, re-read
@@ -340,14 +360,11 @@ mod tests {
 
     #[async_trait::async_trait]
     impl StorageBackend for CountingBackend {
-        async fn put_chunk(&self, chunk: &Chunk) -> Result<()> {
-            self.inner.put_chunk(chunk).await
+        async fn put_archive(&self, chunk: &Chunk, index: &ServiceWindowIndex) -> Result<()> {
+            self.inner.put_archive(chunk, index).await
         }
         async fn get_chunk(&self, service: &str, window: &str) -> Result<Chunk> {
             self.inner.get_chunk(service, window).await
-        }
-        async fn put_index(&self, index: &ServiceWindowIndex) -> Result<()> {
-            self.inner.put_index(index).await
         }
         async fn get_index(&self, service: &str, window: &str) -> Result<ServiceWindowIndex> {
             self.inner.get_index(service, window).await

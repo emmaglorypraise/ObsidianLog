@@ -1816,6 +1816,7 @@ dependencies = [
  "aes-gcm",
  "async-trait",
  "chrono",
+ "futures-util",
  "obsidianlog-core",
  "serde",
  "serde_json",
