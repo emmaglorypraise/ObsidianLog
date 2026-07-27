@@ -1,14 +1,15 @@
 //! ObsidianLog CLI library.
 //!
-//! Hosts the command-line surface (`init`, `ingest`, `query`, `verify`), config
+//! Hosts the command-line surface (`init`, `serve`, `query`, `verify`), config
 //! loading, and the OS-keychain key store, wiring them to the
 //! [`obsidianlog_store`] and [`obsidianlog_ingest`] crates. The binary in
 //! `src/main.rs` is a thin shell over [`run`].
 //!
 //! # Status
 //!
-//! The argument surface is complete and dispatches to each command; the command
-//! implementations (`init`, `ingest`, `query`, `verify`) are in progress.
+//! The argument surface is complete and dispatches to each command. `serve` is
+//! implemented; `init`, `query`, and `verify` are stubs pending the key store,
+//! query engine, and chain-verification tooling respectively.
 
 pub mod cli;
 pub mod commands;
@@ -27,7 +28,7 @@ use anyhow::Result;
 pub fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Init(args) => commands::init::run(args, cli.config),
-        Command::Ingest(args) => commands::ingest::run(args, cli.config),
+        Command::Serve(args) => commands::serve::run(args, cli.config),
         Command::Query(args) => commands::query::run(args, cli.config),
         Command::Verify(args) => commands::verify::run(args, cli.config),
     }

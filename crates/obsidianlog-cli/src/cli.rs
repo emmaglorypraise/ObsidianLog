@@ -27,7 +27,7 @@ pub enum Command {
     Init(InitArgs),
 
     /// Run the Vector-compatible HTTP ingest server.
-    Ingest(IngestArgs),
+    Serve(ServeArgs),
 
     /// Query archived logs by time range, service, level, host, or keyword.
     Query(QueryArgs),
@@ -48,12 +48,12 @@ pub struct InitArgs {
     pub force: bool,
 }
 
-/// Arguments for `obsidianlog ingest`.
+/// Arguments for `obsidianlog serve`.
 #[derive(Debug, Args)]
-pub struct IngestArgs {
-    /// Address to bind the HTTP ingest endpoint to.
-    #[arg(long, default_value = "127.0.0.1:7080", value_name = "ADDR")]
-    pub bind: String,
+pub struct ServeArgs {
+    /// Address to bind the HTTP ingest endpoint to (overrides the config file).
+    #[arg(long, value_name = "ADDR")]
+    pub bind: Option<String>,
 }
 
 /// Arguments for `obsidianlog query`.

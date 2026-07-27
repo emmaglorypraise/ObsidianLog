@@ -77,7 +77,7 @@ This is a Cargo workspace of four crates:
 | [`obsidianlog-core`](crates/obsidianlog-core) | foundation library | shared types, the canonical error, and the `StorageBackend` trait — no I/O |
 | [`obsidianlog-store`](crates/obsidianlog-store) | core library | compression, encryption, hash chaining, chunking, metadata index, and the storage backends (Sia + local) |
 | [`obsidianlog-ingest`](crates/obsidianlog-ingest) | service library | Vector-compatible HTTP ingest server that drives the storage pipeline |
-| [`obsidianlog-cli`](crates/obsidianlog-cli) | CLI / binary | the `obsidianlog` binary: `init`, `ingest`, `query`, `verify` |
+| [`obsidianlog-cli`](crates/obsidianlog-cli) | CLI / binary | the `obsidianlog` binary: `init`, `serve`, `query`, `verify` |
 
 The `StorageBackend` trait (in `obsidianlog-core`) decouples the pipeline from
 storage, so the same pipeline archives to Sia or to a local store (see

@@ -34,7 +34,7 @@ pub const TAG_LEN: usize = 16;
 /// The key bytes are zeroized when the value is dropped, so they do not linger
 /// in freed memory. The key material is never logged or `Display`ed, and `Debug`
 /// is redacted.
-#[derive(Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct EncryptionKey([u8; KEY_LEN]);
 
 impl EncryptionKey {
@@ -42,6 +42,12 @@ impl EncryptionKey {
     /// CSPRNG (see the CLI key store) and keeping them secret.
     pub fn new(bytes: [u8; KEY_LEN]) -> Self {
         Self(bytes)
+    }
+
+    /// Whether this is the all-zero placeholder key, i.e. no real key has been
+    /// configured. Used to warn before archiving with it; never leaks bytes.
+    pub fn is_placeholder(&self) -> bool {
+        self.0 == [0u8; KEY_LEN]
     }
 }
 

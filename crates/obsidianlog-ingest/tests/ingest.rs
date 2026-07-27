@@ -29,7 +29,7 @@ fn config(root: &std::path::Path) -> Config {
         bucket: "obsidianlog".to_string(),
         storage_root: root.to_path_buf(),
         window_secs: 3600,
-        encryption_key: KEY,
+        encryption_key: EncryptionKey::new(KEY),
     }
 }
 
