@@ -21,7 +21,6 @@ use std::sync::Arc;
 
 use obsidianlog_store::ArchiveEngine;
 use obsidianlog_store::backend::LocalBackend;
-use obsidianlog_store::encrypt::EncryptionKey;
 
 use crate::server::{SharedEngine, build_router};
 
@@ -30,7 +29,7 @@ pub fn build_engine(config: &Config) -> ArchiveEngine<LocalBackend> {
     let backend = LocalBackend::new(&config.storage_root, &config.bucket);
     ArchiveEngine::new(
         backend,
-        EncryptionKey::new(config.encryption_key),
+        config.encryption_key.clone(),
         config.bucket.clone(),
     )
     .with_window_secs(config.window_secs)
@@ -48,7 +47,7 @@ pub async fn serve_on(listener: tokio::net::TcpListener, engine: SharedEngine) -
 
 /// Run the ingest server until shutdown (Ctrl-C), binding `config.bind`.
 pub async fn serve(config: Config) -> Result<()> {
-    if config.encryption_key == [0u8; 32] {
+    if config.encryption_key.is_placeholder() {
         eprintln!(
             "warning: ingest is running with an all-zero encryption key; \
              set a real key before archiving production data"

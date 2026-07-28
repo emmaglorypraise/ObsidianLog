@@ -4,7 +4,7 @@ The command-line interface and published binary for **ObsidianLog** — long-ter
 tamper-evident operational log archival on [Sia](https://sia.tech).
 
 The crate is `obsidianlog-cli`; it installs a binary named `obsidianlog`
-(`init`, `ingest`, `query`, `verify`). It builds on the workspace crates
+(`init`, `serve`, `query`, `verify`). It builds on the workspace crates
 [`obsidianlog-core`](https://crates.io/crates/obsidianlog-core) (shared types and
 the `StorageBackend` trait),
 [`obsidianlog-store`](https://crates.io/crates/obsidianlog-store) (storage

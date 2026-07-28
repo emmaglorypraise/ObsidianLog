@@ -4,7 +4,7 @@
 //! `obsidianlog-store` / `obsidianlog-ingest` crates; the dispatch shape is in
 //! place so the real logic has a clear home.
 
-pub mod ingest;
 pub mod init;
 pub mod query;
+pub mod serve;
 pub mod verify;

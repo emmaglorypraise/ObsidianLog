@@ -1778,7 +1778,8 @@ dependencies = [
  "obsidianlog-ingest",
  "obsidianlog-store",
  "serde",
- "serde_json",
+ "tempfile",
+ "toml",
 ]
 
 [[package]]

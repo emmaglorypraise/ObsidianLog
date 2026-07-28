@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+use obsidianlog_store::encrypt::EncryptionKey;
+
 use crate::error::{Error, Result};
 
 /// Ingest server configuration, loaded from a TOML file or defaults.
@@ -24,7 +26,7 @@ pub struct Config {
     pub window_secs: u64,
     /// AES-256 key. Never loaded from the config file; set by the caller.
     #[serde(skip)]
-    pub encryption_key: [u8; 32],
+    pub encryption_key: EncryptionKey,
 }
 
 impl Default for Config {
@@ -34,7 +36,7 @@ impl Default for Config {
             bucket: "obsidianlog".to_string(),
             storage_root: PathBuf::from("./obsidianlog-data"),
             window_secs: 3600,
-            encryption_key: [0u8; 32],
+            encryption_key: EncryptionKey::new([0u8; 32]),
         }
     }
 }
