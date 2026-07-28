@@ -21,6 +21,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex as StdMutex};
 
+use chrono::{DateTime, Utc};
 use futures_util::stream::{self, StreamExt};
 use tokio::sync::Mutex as AsyncMutex;
 
@@ -33,10 +34,10 @@ use obsidianlog_core::record::{LogBatch, LogRecord};
 use obsidianlog_core::types::GENESIS;
 
 use crate::chain::compute_chunk_hash;
-use crate::chunking::{DEFAULT_WINDOW_SECS, chunk_batch};
+use crate::chunking::{DEFAULT_WINDOW_SECS, chunk_batch, window_bounds};
 use crate::compress::{DEFAULT_LEVEL, compress, decompress};
 use crate::encrypt::{EncryptionKey, decrypt_chunk, derive_nonce, encrypt_chunk};
-use crate::index::build_index;
+use crate::index::{IndexQuery, build_index, might_match, record_matches};
 
 /// Max archives uploaded concurrently per batch (bounds fan-out to the backend).
 const MAX_CONCURRENT_UPLOADS: usize = 8;
@@ -210,6 +211,75 @@ impl<B: StorageBackend> ArchiveEngine<B> {
         Ok(chunks)
     }
 
+    /// Run an index-first query: from the manifest, select `(service, window)`
+    /// candidates by time range and service; load only their
+    /// [`ServiceWindowIndex`]es and prefilter with [`might_match`]; fetch and
+    /// decrypt only the surviving chunks; then apply the exact per-record
+    /// filter. Returns matching records in chunk-fetch order (not globally
+    /// time-sorted).
+    pub async fn query(&self, query: &IndexQuery) -> Result<Vec<LogRecord>> {
+        let manifest = self.read_manifest_or_default().await?;
+
+        // 1 & 2: candidate windows from the manifest, by service + time overlap.
+        let mut candidates = Vec::new();
+        for (service, chain) in &manifest.services {
+            if query.service.as_deref().is_some_and(|s| s != service) {
+                continue;
+            }
+            for chunk_ref in &chain.chunks {
+                if self.window_might_overlap(&chunk_ref.window, query.since, query.until) {
+                    candidates.push(chunk_ref.clone());
+                }
+            }
+        }
+
+        // 3. Load only the candidates' indexes; prefilter.
+        let mut surviving = Vec::with_capacity(candidates.len());
+        for chunk_ref in candidates {
+            let index = self
+                .backend
+                .get_index(&chunk_ref.service, &chunk_ref.window)
+                .await?;
+            if might_match(&index, query) {
+                surviving.push(chunk_ref);
+            }
+        }
+
+        // 4. Fetch and decrypt only the surviving chunks.
+        let mut records = Vec::new();
+        for chunk_ref in &surviving {
+            records.extend(
+                self.read_records(&chunk_ref.service, &chunk_ref.window)
+                    .await?,
+            );
+        }
+
+        // 5. Exact per-record filter.
+        records.retain(|r| record_matches(r, query));
+        Ok(records)
+    }
+
+    /// Conservative time-overlap check for candidate selection: `false` only
+    /// when the window's `[start, start + window_secs)` span provably can't
+    /// overlap `[since, until]`. An unparseable window label is never excluded.
+    fn window_might_overlap(
+        &self,
+        window: &str,
+        since: Option<DateTime<Utc>>,
+        until: Option<DateTime<Utc>>,
+    ) -> bool {
+        let Some((start, end)) = window_bounds(window, self.window_secs) else {
+            return true;
+        };
+        if since.is_some_and(|s| end <= s) {
+            return false;
+        }
+        if until.is_some_and(|u| start > u) {
+            return false;
+        }
+        true
+    }
+
     async fn read_manifest_or_default(&self) -> Result<Manifest> {
         match self.backend.read_manifest().await {
             Ok(manifest) => Ok(manifest),
@@ -352,10 +422,24 @@ mod tests {
         assert_eq!(total, 12 * 3);
     }
 
-    /// A backend that counts `write_manifest` calls over a real `LocalBackend`.
+    /// A backend that counts calls over a real `LocalBackend`, so tests can
+    /// assert how much I/O an operation actually performed.
     struct CountingBackend {
         inner: LocalBackend,
         manifest_writes: AtomicUsize,
+        index_reads: AtomicUsize,
+        chunk_reads: AtomicUsize,
+    }
+
+    impl CountingBackend {
+        fn new(dir: &tempfile::TempDir) -> Self {
+            Self {
+                inner: LocalBackend::new(dir.path(), "obsidianlog"),
+                manifest_writes: AtomicUsize::new(0),
+                index_reads: AtomicUsize::new(0),
+                chunk_reads: AtomicUsize::new(0),
+            }
+        }
     }
 
     #[async_trait::async_trait]
@@ -364,9 +448,11 @@ mod tests {
             self.inner.put_archive(chunk, index).await
         }
         async fn get_chunk(&self, service: &str, window: &str) -> Result<Chunk> {
+            self.chunk_reads.fetch_add(1, Ordering::SeqCst);
             self.inner.get_chunk(service, window).await
         }
         async fn get_index(&self, service: &str, window: &str) -> Result<ServiceWindowIndex> {
+            self.index_reads.fetch_add(1, Ordering::SeqCst);
             self.inner.get_index(service, window).await
         }
         async fn list_chunks(
@@ -388,10 +474,7 @@ mod tests {
     #[tokio::test]
     async fn multi_window_batch_writes_manifest_once() {
         let dir = tempfile::tempdir().unwrap();
-        let backend = CountingBackend {
-            inner: LocalBackend::new(dir.path(), "obsidianlog"),
-            manifest_writes: AtomicUsize::new(0),
-        };
+        let backend = CountingBackend::new(&dir);
         let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
 
         // One batch whose records span three windows across two services.
@@ -421,5 +504,217 @@ mod tests {
             let chunks = engine.service_chunks(service).await.unwrap();
             assert!(verify_chain(&chunks).is_ok(), "chain must be intact");
         }
+    }
+
+    /// A record with an explicit level/host and a window-identifying keyword in
+    /// its message, for query tests (the plain `record` helper above hardcodes
+    /// level/host so it can't exercise those filters).
+    fn tagged_record(
+        service: &str,
+        epoch_secs: i64,
+        level: &str,
+        host: &str,
+        msg: &str,
+    ) -> LogRecord {
+        LogRecord {
+            raw: serde_json::json!({ "msg": msg }),
+            timestamp: DateTime::<Utc>::from_timestamp(epoch_secs, 0).unwrap(),
+            service: service.to_string(),
+            level: Some(level.to_string()),
+            host: Some(host.to_string()),
+            trace_id: None,
+        }
+    }
+
+    /// Seeds 2 services × 3 hourly windows, each window holding one info/host-1
+    /// record and one error/host-2 record, tagged with a window-unique keyword
+    /// ("alpha"/"bravo"/"charlie" for hour 0/1/2) so keyword and time-range
+    /// filters each narrow to a known, distinct subset.
+    async fn seed_query_fixture(dir: &tempfile::TempDir) {
+        let backend = LocalBackend::new(dir.path(), "obsidianlog");
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+
+        for service in ["api", "web"] {
+            for (hour, keyword) in [(0i64, "alpha"), (1i64, "bravo"), (2i64, "charlie")] {
+                let base = hour * 3600;
+                let records = vec![
+                    tagged_record(
+                        service,
+                        base,
+                        "info",
+                        "host-1",
+                        &format!("{keyword} starting"),
+                    ),
+                    tagged_record(
+                        service,
+                        base + 1,
+                        "error",
+                        "host-2",
+                        &format!("{keyword} failed"),
+                    ),
+                ];
+                engine.ingest_batch(LogBatch(records)).await.unwrap();
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn query_narrows_results_by_every_filter() {
+        let dir = tempfile::tempdir().unwrap();
+        seed_query_fixture(&dir).await;
+        let backend = LocalBackend::new(dir.path(), "obsidianlog");
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+
+        // No filters: everything (2 services * 3 windows * 2 records).
+        let all = engine.query(&IndexQuery::default()).await.unwrap();
+        assert_eq!(all.len(), 12);
+
+        // Service.
+        let api_only = engine
+            .query(&IndexQuery {
+                service: Some("api".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(api_only.len(), 6);
+        assert!(api_only.iter().all(|r| r.service == "api"));
+
+        // Level, scoped within a service.
+        let api_errors = engine
+            .query(&IndexQuery {
+                service: Some("api".into()),
+                level: Some("error".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(api_errors.len(), 3);
+        assert!(
+            api_errors
+                .iter()
+                .all(|r| r.level.as_deref() == Some("error"))
+        );
+
+        // Host.
+        let host1 = engine
+            .query(&IndexQuery {
+                host: Some("host-1".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(host1.len(), 6);
+        assert!(host1.iter().all(|r| r.host.as_deref() == Some("host-1")));
+
+        // Keyword: both services' "bravo" (hour 1) window, both records each.
+        let bravo = engine
+            .query(&IndexQuery {
+                keyword: Some("bravo".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(bravo.len(), 4);
+        assert!(
+            bravo
+                .iter()
+                .all(|r| r.raw["msg"].as_str().unwrap().contains("bravo"))
+        );
+
+        // Time range covering exactly the hour-1 window.
+        let hour1 = engine
+            .query(&IndexQuery {
+                since: Some(DateTime::<Utc>::from_timestamp(3600, 0).unwrap()),
+                until: Some(DateTime::<Utc>::from_timestamp(3600 * 2 - 1, 0).unwrap()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(hour1.len(), 4);
+
+        // Filters compose (AND semantics) down to a single record.
+        let combo = engine
+            .query(&IndexQuery {
+                service: Some("web".into()),
+                level: Some("error".into()),
+                keyword: Some("charlie".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(combo.len(), 1);
+        assert_eq!(combo[0].service, "web");
+        assert_eq!(combo[0].level.as_deref(), Some("error"));
+    }
+
+    #[tokio::test]
+    async fn query_fetches_only_the_necessary_indexes_and_chunks() {
+        let dir = tempfile::tempdir().unwrap();
+        seed_query_fixture(&dir).await;
+
+        // Service filter: candidate selection must skip "web" entirely — only
+        // "api"'s 3 windows should ever be index-loaded, and since none of them
+        // carry a level/host/keyword filter to fail, all 3 chunks are fetched.
+        let backend = CountingBackend::new(&dir);
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+        let results = engine
+            .query(&IndexQuery {
+                service: Some("api".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 6);
+        assert_eq!(
+            engine.backend().index_reads.load(Ordering::SeqCst),
+            3,
+            "only api's 3 windows should be index-loaded, never web's"
+        );
+        assert_eq!(
+            engine.backend().chunk_reads.load(Ordering::SeqCst),
+            3,
+            "every surviving candidate's chunk is fetched"
+        );
+
+        // Keyword filter with no service/time restriction: all 6 windows are
+        // index-load candidates, but only the 2 containing "bravo" should have
+        // their chunks fetched.
+        let backend = CountingBackend::new(&dir);
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+        let results = engine
+            .query(&IndexQuery {
+                keyword: Some("bravo".into()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 4);
+        assert_eq!(engine.backend().index_reads.load(Ordering::SeqCst), 6);
+        assert_eq!(
+            engine.backend().chunk_reads.load(Ordering::SeqCst),
+            2,
+            "the keyword prefilter must drop the 4 non-matching windows before fetching"
+        );
+
+        // Time range: candidate selection from the manifest alone must exclude
+        // hour-0 and hour-2 windows before ever loading their indexes.
+        let backend = CountingBackend::new(&dir);
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+        let results = engine
+            .query(&IndexQuery {
+                since: Some(DateTime::<Utc>::from_timestamp(3600, 0).unwrap()),
+                until: Some(DateTime::<Utc>::from_timestamp(3600 * 2 - 1, 0).unwrap()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 4);
+        assert_eq!(
+            engine.backend().index_reads.load(Ordering::SeqCst),
+            2,
+            "time-range candidate selection must exclude hour-0/2 windows before loading any index"
+        );
+        assert_eq!(engine.backend().chunk_reads.load(Ordering::SeqCst), 2);
     }
 }

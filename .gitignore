@@ -4,7 +4,7 @@
 # Backtraces emitted on panic
 backtrace.txt
 
-# Local secrets and runtime config 
+# Local secrets and runtime config
 /.obsidianlog
 *.secret
 *.key
@@ -13,10 +13,10 @@ backtrace.txt
 .DS_Store
 *.swp
 
-# Node artifacts (this is a Rust project — keep stray npm installs out)
+# Node artifacts
 node_modules/
 
-# Claude Code local context — kept out of version control by request.
+# Claude Code local context
 /CLAUDE.md
 /.claude/
 

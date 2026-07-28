@@ -114,6 +114,53 @@ pub fn might_match(index: &ServiceWindowIndex, query: &IndexQuery) -> bool {
     true
 }
 
+/// Decide whether a single decrypted `record` exactly matches `query`.
+///
+/// Complements [`might_match`]: that function conservatively decides whether a
+/// *window* could contain a match (its level/host/keyword sets are aggregated
+/// across every record in the window, so a window can pass without every
+/// record in it matching). This is the exact, final check applied to each
+/// decrypted record surviving the prefilter.
+pub fn record_matches(record: &LogRecord, query: &IndexQuery) -> bool {
+    if let Some(service) = &query.service {
+        if &record.service != service {
+            return false;
+        }
+    }
+    if let Some(since) = query.since {
+        if record.timestamp < since {
+            return false;
+        }
+    }
+    if let Some(until) = query.until {
+        if record.timestamp > until {
+            return false;
+        }
+    }
+    if let Some(level) = &query.level {
+        if record.level.as_deref() != Some(level.as_str()) {
+            return false;
+        }
+    }
+    if let Some(host) = &query.host {
+        if record.host.as_deref() != Some(host.as_str()) {
+            return false;
+        }
+    }
+    if let Some(keyword) = &query.keyword {
+        let mut query_tokens = BTreeSet::new();
+        tokenize_into(keyword, &mut query_tokens);
+        if !query_tokens.is_empty() {
+            let mut record_tokens = BTreeSet::new();
+            collect_tokens(&record.raw, &mut record_tokens);
+            if !query_tokens.iter().all(|t| record_tokens.contains(t)) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 /// Recursively tokenize the string values of a JSON value into `out`.
 fn collect_tokens(value: &Value, out: &mut BTreeSet<String>) {
     match value {
@@ -270,6 +317,67 @@ mod tests {
             &index,
             &IndexQuery {
                 until: Some(ts(50)),
+                ..Default::default()
+            }
+        ));
+    }
+
+    #[test]
+    fn record_matches_checks_every_field_exactly() {
+        let error_record = record("error", "host-2", "request timeout exceeded", 200);
+        let info_record = record("info", "host-1", "database connection established", 100);
+
+        // A window-level prefilter that would pass (level "error" is present in
+        // the window) must not make the info record match too.
+        assert!(record_matches(&error_record, &IndexQuery::default()));
+        assert!(!record_matches(
+            &info_record,
+            &IndexQuery {
+                level: Some("error".into()),
+                ..Default::default()
+            }
+        ));
+        assert!(record_matches(
+            &error_record,
+            &IndexQuery {
+                level: Some("error".into()),
+                ..Default::default()
+            }
+        ));
+        assert!(!record_matches(
+            &error_record,
+            &IndexQuery {
+                host: Some("host-1".into()),
+                ..Default::default()
+            }
+        ));
+        assert!(!record_matches(
+            &info_record,
+            &IndexQuery {
+                keyword: Some("timeout".into()),
+                ..Default::default()
+            }
+        ));
+        assert!(record_matches(
+            &error_record,
+            &IndexQuery {
+                keyword: Some("timeout".into()),
+                ..Default::default()
+            }
+        ));
+        // Inclusive time bounds, checked against the record's own timestamp.
+        assert!(record_matches(
+            &info_record,
+            &IndexQuery {
+                since: Some(ts(100)),
+                until: Some(ts(100)),
+                ..Default::default()
+            }
+        ));
+        assert!(!record_matches(
+            &info_record,
+            &IndexQuery {
+                since: Some(ts(101)),
                 ..Default::default()
             }
         ));
