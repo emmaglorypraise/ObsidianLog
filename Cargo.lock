@@ -1773,12 +1773,16 @@ name = "obsidianlog-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "keyring",
+ "obsidianlog-core",
  "obsidianlog-ingest",
  "obsidianlog-store",
  "serde",
+ "serde_json",
  "tempfile",
+ "tokio",
  "toml",
 ]
 

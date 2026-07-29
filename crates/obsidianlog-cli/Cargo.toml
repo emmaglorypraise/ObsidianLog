@@ -19,15 +19,21 @@ name = "obsidianlog"
 path = "src/main.rs"
 
 [dependencies]
+obsidianlog-core.workspace = true
 obsidianlog-store.workspace = true
 obsidianlog-ingest.workspace = true
 clap.workspace = true
 anyhow.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 # Config file parsing (matches obsidianlog-ingest's own config format).
 toml = "1.1.2"
 # OS keychain for the user-generated encryption key created by `obsidianlog init`.
 keyring = "4.1.4"
+# Parsing --from/--to (RFC 3339 or relative, e.g. "24h") and formatting timestamps.
+chrono = { version = "0.4.39", default-features = false, features = ["serde", "std", "clock"] }
+# Driving the async ArchiveEngine::query from the sync CLI (one-shot, single-threaded).
+tokio = { version = "1.52.3", features = ["rt"] }
 
 [dev-dependencies]
 tempfile = "3.23.0"

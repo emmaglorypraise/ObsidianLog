@@ -59,13 +59,15 @@ pub struct ServeArgs {
 /// Arguments for `obsidianlog query`.
 #[derive(Debug, Args)]
 pub struct QueryArgs {
-    /// Inclusive lower bound of the time range (RFC 3339).
-    #[arg(long, value_name = "RFC3339")]
-    pub since: Option<String>,
+    /// Inclusive lower bound of the time range: RFC 3339, or relative to now
+    /// (e.g. `24h`, `30m`, `7d`).
+    #[arg(long, value_name = "TIME")]
+    pub from: Option<String>,
 
-    /// Exclusive upper bound of the time range (RFC 3339).
-    #[arg(long, value_name = "RFC3339")]
-    pub until: Option<String>,
+    /// Inclusive upper bound of the time range: RFC 3339, or relative to now
+    /// (e.g. `1h`, `30m`, `7d`).
+    #[arg(long, value_name = "TIME")]
+    pub to: Option<String>,
 
     /// Filter by service name.
     #[arg(long, value_name = "NAME")]
@@ -101,8 +103,8 @@ pub struct VerifyArgs {
 pub enum OutputFormat {
     /// Human-readable, colorized terminal output.
     Human,
-    /// Newline-delimited / structured JSON.
+    /// A pretty-printed, structured JSON array of matched records.
     Json,
-    /// Raw decrypted log bytes, suitable for piping to `jq`.
+    /// Raw decrypted log bytes, one JSON object per line, for piping to `jq`.
     Raw,
 }

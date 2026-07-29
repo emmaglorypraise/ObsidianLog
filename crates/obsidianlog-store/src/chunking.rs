@@ -41,6 +41,22 @@ pub fn window_label(ts: DateTime<Utc>, window_secs: u64) -> String {
         .to_string()
 }
 
+/// The `[start, start + window_secs)` time span the window labelled `window`
+/// covers, or `None` if `window` isn't a valid `YYYY-MM-DD-HH` label.
+///
+/// The inverse of [`window_label`]: parses the label's date and hour back into
+/// the window's start instant. Used by queries to decide, from the manifest
+/// alone, whether a window can overlap a requested time range — before loading
+/// its index.
+pub fn window_bounds(window: &str, window_secs: u64) -> Option<(DateTime<Utc>, DateTime<Utc>)> {
+    let (date_part, hour_part) = window.rsplit_once('-')?;
+    let date = chrono::NaiveDate::parse_from_str(date_part, "%Y-%m-%d").ok()?;
+    let hour: u32 = hour_part.parse().ok()?;
+    let start = date.and_hms_opt(hour, 0, 0)?.and_utc();
+    let end = start + chrono::Duration::seconds(window_secs.max(1) as i64);
+    Some((start, end))
+}
+
 /// Group `batch` into per-`(service, time_window)` buckets using `window_secs`.
 ///
 /// Buckets are returned sorted by `(service, window)`; records within a bucket
@@ -121,6 +137,36 @@ mod tests {
         assert_eq!(buckets[2].service, "web");
         assert_eq!(buckets[2].window, "1970-01-01-00");
         assert_eq!(buckets[2].records.len(), 1);
+    }
+
+    #[test]
+    fn window_bounds_inverts_window_label() {
+        let ts = DateTime::<Utc>::from_timestamp(3600 + 1800, 0).unwrap(); // 01:30
+        let label = window_label(ts, DEFAULT_WINDOW_SECS);
+        let (start, end) = window_bounds(&label, DEFAULT_WINDOW_SECS).unwrap();
+        assert_eq!(start, DateTime::<Utc>::from_timestamp(3600, 0).unwrap());
+        assert_eq!(end, DateTime::<Utc>::from_timestamp(3600 * 2, 0).unwrap());
+        assert!(
+            start <= ts && ts < end,
+            "the original instant falls in its bounds"
+        );
+    }
+
+    #[test]
+    fn window_bounds_respects_a_non_default_window_size() {
+        let six_hours = 6 * 3600;
+        let (start, end) = window_bounds("1970-01-01-00", six_hours).unwrap();
+        assert_eq!(start, DateTime::<Utc>::from_timestamp(0, 0).unwrap());
+        assert_eq!(
+            end,
+            DateTime::<Utc>::from_timestamp(six_hours as i64, 0).unwrap()
+        );
+    }
+
+    #[test]
+    fn window_bounds_rejects_malformed_labels() {
+        assert!(window_bounds("not-a-window", DEFAULT_WINDOW_SECS).is_none());
+        assert!(window_bounds("2026-13-40-99", DEFAULT_WINDOW_SECS).is_none());
     }
 
     #[test]
