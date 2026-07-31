@@ -61,7 +61,7 @@ ingest server.
 | `obsidianlog-ingest`: Vector-compatible HTTP ingest server (`/ingest`, `/health`) | [#13](https://github.com/emmaglorypraise/ObsidianLog/pull/13) | _Done._ axum write-then-ack server + thin binary + `examples/vector.toml`; ephemeral-port reqwest integration tests. |
 | Integration test suite with CI | [#13](https://github.com/emmaglorypraise/ObsidianLog/pull/13) | _Done._ CI green across 3 OSes + audit; **zero ignored tests** — store end-to-end + ingest HTTP tests all live. |
 | ADR documenting finalized storage decisions | _done_ | `3ceb7ca` — ADR-0002 (nonces), ADR-0003 (chains), ADR-0004 (layout). |
-| Month 1 progress report submitted to the Sia Foundation forum | _pending_ | Due 2026-07-25. |
+| Month 1 progress report submitted to the Sia Foundation forum | _done_ | Submitted (was due 2026-07-25). |
 
 ## Month 2 — Query Tooling & Developer Experience (due 2026-08-25)
 
@@ -69,9 +69,10 @@ ingest server.
 
 | Deliverable / task | Pull Request(s) / Commit(s) | Status / Notes |
 | --- | --- | --- |
-| `obsidianlog` CLI query interface | _pending_ | CLI arg surface scaffolded in `cli.rs`. |
-| Hash-chain verification tooling (`obsidianlog verify`) | _pending_ | |
-| `obsidianlog init` setup wizard | _pending_ | Target: < 15 min on a clean machine. |
+| `obsidianlog` CLI command skeleton + config loading | [#32](https://github.com/emmaglorypraise/ObsidianLog/pull/32) | _Done._ `init`/`serve`/`query`/`verify` clap tree; `--config` precedence (flag > `$XDG_CONFIG_HOME` > `~/.config`), TOML loading; `serve` wired to `obsidianlog-ingest::serve`. |
+| `obsidianlog` CLI query interface | [#33](https://github.com/emmaglorypraise/ObsidianLog/pull/33) | _Done._ Index-first `ArchiveEngine::query`: candidate windows from the manifest by time+service, prefiltered via `ServiceWindowIndex`, exact per-record filtering; `--from`/`--to`/`--service`/`--level`/`--host`/`--keyword`, `human`/`json`/`raw` output. |
+| Hash-chain verification tooling (`obsidianlog verify`) | [#34](https://github.com/emmaglorypraise/ObsidianLog/pull/34) | _Done._ `ArchiveEngine::verify_service`/`verify_all` walk each service's chain from genesis and check it against the manifest's recorded head; never decrypts. Optional `--service` scope; non-zero exit on any failure for CI/cron. |
+| `obsidianlog init` setup wizard | _pending_ | Target: < 15 min on a clean machine. Blocked on `keystore::generate`/`keystore::load` (currently stubbed) — `serve` and `query` also call `keystore::load`, so neither works end-to-end until this lands. |
 | Cross-platform binaries (Linux, macOS, Windows) | _pending_ | `release.yml` workflow scaffolded. |
 | Docker Compose quickstart | _pending_ | `docker/` scaffolded. |
 | Month 2 progress report submitted to the Sia Foundation forum | _pending_ | Due 2026-08-25. |
