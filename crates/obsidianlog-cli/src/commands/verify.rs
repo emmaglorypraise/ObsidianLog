@@ -1,22 +1,71 @@
 //! `obsidianlog verify` — hash-chain integrity check.
 //!
-//! Traverses the manifest's chain head, recomputing `SHA-256(chunk_{n-1})` and
-//! comparing it to each chunk's recorded `prev_hash`. Any mismatch, gap, or
-//! reorder is reported as a detectable integrity violation. Doubles as a health
-//! check that archived evidence is retrievable.
+//! Thin wrapper: resolves the config, then hands off to
+//! [`obsidianlog_store::ArchiveEngine::verify_service`] /
+//! [`obsidianlog_store::ArchiveEngine::verify_all`], which walk each service's
+//! chain from genesis, and prints a clear OK/FAIL summary per service.
+//!
+//! Verification is defined entirely over encrypted bytes (chunk hashes cover
+//! the ciphertext, not the plaintext), so this never decrypts and doesn't need
+//! the archive's encryption key or OS-keychain access — a placeholder key is
+//! used purely because [`ArchiveEngine`] always carries one.
 
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use obsidianlog_store::ArchiveEngine;
+use obsidianlog_store::backend::LocalBackend;
+use obsidianlog_store::encrypt::EncryptionKey;
 
 use crate::cli::VerifyArgs;
+use crate::config::Config;
 
 /// Verify the hash chain and report any integrity violations.
 ///
-/// TODO(impl): load the manifest via `obsidianlog_store`, walk the chain
-/// (optionally scoped to `args.service`), recompute hashes, and report the first
-/// break position.
-pub fn run(args: VerifyArgs, config: Option<PathBuf>) -> Result<()> {
-    let _ = (args, config);
-    anyhow::bail!("obsidianlog verify is not yet implemented — see the roadmap")
+/// Returns `Err` if any service's chain fails verification, so the caller
+/// (via `main`'s exit-code mapping) exits non-zero — CI/cron can gate on it.
+pub fn run(args: VerifyArgs, config_path: Option<PathBuf>) -> Result<()> {
+    let config = Config::load(config_path.as_deref())?;
+    let backend = LocalBackend::new(&config.local.data_dir, &config.bucket);
+    let engine = ArchiveEngine::new(
+        backend,
+        EncryptionKey::new([0u8; 32]),
+        config.bucket.clone(),
+    );
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("starting the verify runtime")?;
+
+    let results = match &args.service {
+        Some(service) => {
+            let result = runtime.block_on(engine.verify_service(service));
+            vec![(service.clone(), result)]
+        }
+        None => runtime
+            .block_on(engine.verify_all())
+            .context("reading the manifest")?,
+    };
+
+    if results.is_empty() {
+        println!("no services archived yet — nothing to verify");
+        return Ok(());
+    }
+
+    let mut failed = false;
+    for (service, result) in &results {
+        match result {
+            Ok(count) => println!("OK   {service}: {count} chunk(s) verified, chain intact"),
+            Err(err) => {
+                failed = true;
+                println!("FAIL {service}: {err}");
+            }
+        }
+    }
+
+    if failed {
+        anyhow::bail!("hash-chain verification failed");
+    }
+    Ok(())
 }

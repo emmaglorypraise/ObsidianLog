@@ -98,6 +98,10 @@ pub enum ChainBreakKind {
     Reordered,
     /// A chunk is missing — the sequence numbers have a gap.
     Missing,
+    /// The chain's computed head doesn't match the manifest's recorded head.
+    /// Nothing within the chain commits to the last chunk's hash, so tampering
+    /// with it can only be caught by checking against the manifest separately.
+    HeadMismatch,
 }
 
 /// A detected break in a hash chain: where it is and what kind.
@@ -117,6 +121,7 @@ impl std::fmt::Display for ChainBreak {
             ChainBreakKind::Modified => "modified chunk",
             ChainBreakKind::Reordered => "reordered chunks",
             ChainBreakKind::Missing => "missing chunk",
+            ChainBreakKind::HeadMismatch => "head hash mismatch",
         };
         write!(
             f,

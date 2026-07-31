@@ -33,7 +33,7 @@ use obsidianlog_core::manifest::{Manifest, ManifestServiceChain};
 use obsidianlog_core::record::{LogBatch, LogRecord};
 use obsidianlog_core::types::GENESIS;
 
-use crate::chain::compute_chunk_hash;
+use crate::chain::{ChainBreak, ChainBreakKind, compute_chunk_hash, verify_chain};
 use crate::chunking::{DEFAULT_WINDOW_SECS, chunk_batch, window_bounds};
 use crate::compress::{DEFAULT_LEVEL, compress, decompress};
 use crate::encrypt::{EncryptionKey, decrypt_chunk, derive_nonce, encrypt_chunk};
@@ -278,6 +278,69 @@ impl<B: StorageBackend> ArchiveEngine<B> {
             return false;
         }
         true
+    }
+
+    /// Verify one service's hash chain against the manifest: fetch every chunk
+    /// the manifest records for `service` (in chain order, from genesis),
+    /// structurally verify it (sequence monotonicity + `prev_hash` links, via
+    /// [`verify_chain`]), then confirm the computed head matches the
+    /// manifest's recorded head hash — the one thing nothing within the chain
+    /// itself commits to.
+    ///
+    /// The chain is defined entirely over encrypted bytes, so this never
+    /// decrypts and doesn't need the archive's encryption key. Returns the
+    /// number of chunks verified. A chunk the manifest references but storage
+    /// can't produce is reported as [`ChainBreakKind::Missing`] at its
+    /// manifest position — the first break found is returned.
+    pub async fn verify_service(&self, service: &str) -> Result<usize> {
+        let manifest = self.read_manifest_or_default().await?;
+        let Some(chain) = manifest.services.get(service) else {
+            return Ok(0);
+        };
+
+        let mut chunks = Vec::with_capacity(chain.chunks.len());
+        for (position, chunk_ref) in chain.chunks.iter().enumerate() {
+            let chunk = match self.backend.get_chunk(service, &chunk_ref.window).await {
+                Ok(chunk) => chunk,
+                Err(Error::NotFound(_)) => {
+                    return Err(ChainBreak {
+                        position,
+                        sequence: chunk_ref.sequence,
+                        kind: ChainBreakKind::Missing,
+                    }
+                    .into());
+                }
+                Err(e) => return Err(e),
+            };
+            chunks.push(chunk);
+        }
+
+        verify_chain(&chunks)?;
+
+        if let Some(last) = chunks.last() {
+            if compute_chunk_hash(last) != chain.head_hash {
+                return Err(ChainBreak {
+                    position: chunks.len() - 1,
+                    sequence: last.header.sequence,
+                    kind: ChainBreakKind::HeadMismatch,
+                }
+                .into());
+            }
+        }
+
+        Ok(chunks.len())
+    }
+
+    /// Verify every service present in the manifest. Returns `(service,
+    /// result)` pairs sorted by service name; every service is checked even if
+    /// an earlier one fails, so a single run surfaces every broken chain.
+    pub async fn verify_all(&self) -> Result<Vec<(String, Result<usize>)>> {
+        let manifest = self.read_manifest_or_default().await?;
+        let mut results = Vec::with_capacity(manifest.services.len());
+        for service in manifest.services.keys() {
+            results.push((service.clone(), self.verify_service(service).await));
+        }
+        Ok(results)
     }
 
     async fn read_manifest_or_default(&self) -> Result<Manifest> {
@@ -716,5 +779,116 @@ mod tests {
             "time-range candidate selection must exclude hour-0/2 windows before loading any index"
         );
         assert_eq!(engine.backend().chunk_reads.load(Ordering::SeqCst), 2);
+    }
+
+    fn chunk_file_path(dir: &tempfile::TempDir, service: &str, window: &str) -> std::path::PathBuf {
+        dir.path()
+            .join("obsidianlog")
+            .join("chunks")
+            .join(service)
+            .join(format!("{window}.bin"))
+    }
+
+    /// Flip the last byte of a chunk file on disk — corrupting its ciphertext,
+    /// simulating storage-level tampering rather than an in-memory mutation.
+    fn corrupt_chunk_file(dir: &tempfile::TempDir, service: &str, window: &str) {
+        let path = chunk_file_path(dir, service, window);
+        let mut bytes = std::fs::read(&path).unwrap();
+        let last = bytes.len() - 1;
+        bytes[last] ^= 0xFF;
+        std::fs::write(&path, bytes).unwrap();
+    }
+
+    #[tokio::test]
+    async fn verify_confirms_an_intact_chain() {
+        let dir = tempfile::tempdir().unwrap();
+        seed_query_fixture(&dir).await;
+        let backend = LocalBackend::new(dir.path(), "obsidianlog");
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+
+        assert_eq!(
+            engine.verify_service("api").await.unwrap(),
+            3,
+            "3 windows == 3 chunks for api"
+        );
+
+        let results = engine.verify_all().await.unwrap();
+        assert_eq!(results.len(), 2);
+        for (service, result) in &results {
+            assert!(result.is_ok(), "{service} should verify intact: {result:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn verify_service_is_vacuously_ok_for_an_unarchived_service() {
+        let dir = tempfile::tempdir().unwrap();
+        seed_query_fixture(&dir).await;
+        let backend = LocalBackend::new(dir.path(), "obsidianlog");
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+
+        assert_eq!(engine.verify_service("nonexistent").await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn verify_detects_a_corrupted_middle_chunk_and_points_at_it() {
+        let dir = tempfile::tempdir().unwrap();
+        seed_query_fixture(&dir).await;
+        // Corrupt api's hour-1 chunk (sequence 1 of 3) — a middle chunk, so
+        // verify_chain's own hash-link check must catch it.
+        corrupt_chunk_file(&dir, "api", "1970-01-01-01");
+
+        let backend = LocalBackend::new(dir.path(), "obsidianlog");
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+
+        let err = engine
+            .verify_service("api")
+            .await
+            .expect_err("corruption must be caught");
+        let message = err.to_string();
+        assert!(
+            message.contains("position 1") && message.contains("sequence 1"),
+            "must point at the tampered chunk (hour-1, sequence 1): {message}"
+        );
+
+        // The untouched service still verifies, and verify_all reports both.
+        assert!(engine.verify_service("web").await.is_ok());
+        let results = engine.verify_all().await.unwrap();
+        assert!(results.iter().find(|(s, _)| s == "api").unwrap().1.is_err());
+        assert!(results.iter().find(|(s, _)| s == "web").unwrap().1.is_ok());
+    }
+
+    #[tokio::test]
+    async fn verify_detects_a_head_mismatch_when_the_last_chunk_is_tampered() {
+        let dir = tempfile::tempdir().unwrap();
+        seed_query_fixture(&dir).await;
+        // Tamper the LAST chunk (hour-2): verify_chain alone can't catch this —
+        // nothing within the chain commits to the last chunk's hash — only the
+        // separate manifest-head check can.
+        corrupt_chunk_file(&dir, "api", "1970-01-01-02");
+
+        let backend = LocalBackend::new(dir.path(), "obsidianlog");
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+
+        let err = engine
+            .verify_service("api")
+            .await
+            .expect_err("tampering the head chunk must be caught");
+        assert!(err.to_string().contains("head hash mismatch"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn verify_detects_a_missing_chunk_file() {
+        let dir = tempfile::tempdir().unwrap();
+        seed_query_fixture(&dir).await;
+        std::fs::remove_file(chunk_file_path(&dir, "api", "1970-01-01-02")).unwrap();
+
+        let backend = LocalBackend::new(dir.path(), "obsidianlog");
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+
+        let err = engine
+            .verify_service("api")
+            .await
+            .expect_err("a missing chunk must be caught");
+        assert!(err.to_string().contains("missing chunk"), "{err}");
     }
 }
