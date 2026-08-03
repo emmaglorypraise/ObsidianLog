@@ -6,7 +6,7 @@
 
 ObsidianLog sits alongside your hot observability stack (Datadog, Grafana, ELK) as a **cold-tier destination**. Logs flow into your active tools for monitoring, then archive to Sia: encrypted before they leave your infrastructure, compressed, hash-chained for tamper-evidence, and queryable at a fraction of the cost — with the keys and contracts owned entirely by you.
 
-> **Status:** the storage pipeline and HTTP ingest server work and are tested end to end — logs come in, get compressed, encrypted, hash-chained, and indexed, and are retrievable and chain-verifiable, **including against real Sia** (see [Testing the Sia backend](#testing-the-sia-backend)). The `obsidianlog` CLI (`init` / `query` / `verify`) is in active development; see the [roadmap](#roadmap).
+> **Status:** the storage pipeline, HTTP ingest server, and `obsidianlog` CLI (`init`, `serve`, `query`, `verify`) all work and are tested end to end — logs come in, get compressed, encrypted, hash-chained, and indexed, and are retrievable and chain-verifiable, **including against real Sia** (see [Testing the Sia backend](#testing-the-sia-backend)). Cross-platform release binaries and a Docker Compose quickstart are still in progress; see the [roadmap](#roadmap).
 
 ## Try it
 
@@ -36,8 +36,33 @@ The chunk, its metadata index, and the manifest land under the storage root
 logs, point Vector's HTTP sink at the same endpoint — see
 [`crates/obsidianlog-ingest/examples/vector.toml`](crates/obsidianlog-ingest/examples/vector.toml).
 
-> Retrieval and setup via the `obsidianlog` CLI (`query`, `verify`, `init`) are in
-> progress — see the [roadmap](#roadmap).
+### Using the `obsidianlog` CLI
+
+The CLI wraps setup, ingestion, retrieval, and integrity checking:
+
+```sh
+# One-time setup: generates the encryption key (OS keychain, or a 0600
+# secrets file if the keychain isn't available) and writes config.toml.
+# --non-interactive accepts defaults everywhere, useful for scripting.
+obsidianlog init
+
+# Run the ingest server using that config (equivalent to obsidianlog-ingest,
+# but reads the key obsidianlog init created).
+obsidianlog serve
+
+# Query archived logs — filters compose, and results are decrypted
+# index-first (only matching chunks are fetched).
+obsidianlog query --service api --level error --from 24h --format human
+
+# Walk every service's hash chain from genesis and confirm it's intact.
+# Exits non-zero on any break, so CI/cron can gate on it.
+obsidianlog verify
+```
+
+Re-running `obsidianlog init` is idempotent — it detects an existing
+config/key and reuses them; pass `--force` to rotate the key (this makes
+previously archived data undecryptable with the new key, so it asks for
+confirmation unless you're also non-interactive).
 
 ## Architecture
 
@@ -131,8 +156,9 @@ Grant milestones (task-by-task progress in
 - **Month 1 — Core Storage & Ingestion** (due 2026-07-25): `obsidianlog-store`
   and `obsidianlog-ingest`, integration tests + CI, finalized storage ADRs.
 - **Month 2 — Query Tooling & Developer Experience** (due 2026-08-25): CLI query
-  interface and `verify`, the `obsidianlog init` wizard, cross-platform binaries,
-  Docker Compose quickstart.
+  interface, `verify`, and the `obsidianlog init` wizard — **done**;
+  cross-platform binaries and a Docker Compose quickstart are still in
+  progress.
 - **Month 3 — Launch & Ecosystem Integration** (due 2026-09-25): reusable GitHub
   Actions workflow, documentation site, live demo, Grafana/SIEM integrations, and
   public launch.

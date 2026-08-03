@@ -30,6 +30,8 @@ serde_json.workspace = true
 toml = "1.1.2"
 # OS keychain for the user-generated encryption key created by `obsidianlog init`.
 keyring = "4.1.4"
+# Interactive prompts for `obsidianlog init`.
+dialoguer = "0.11"
 # Parsing --from/--to (RFC 3339 or relative, e.g. "24h") and formatting timestamps.
 chrono = { version = "0.4.39", default-features = false, features = ["serde", "std", "clock"] }
 # Driving the async ArchiveEngine::query from the sync CLI (one-shot, single-threaded).

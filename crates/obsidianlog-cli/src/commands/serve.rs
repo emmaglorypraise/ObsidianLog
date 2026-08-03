@@ -10,12 +10,13 @@ use anyhow::{Context, Result};
 
 use crate::cli::ServeArgs;
 use crate::config::Config;
-use crate::keystore::{self, KeySource};
+use crate::keystore;
 
 /// Start the ingest server (blocks until shutdown).
 pub fn run(args: ServeArgs, config_path: Option<PathBuf>) -> Result<()> {
     let config = Config::load(config_path.as_deref())?;
-    let key = keystore::load(&KeySource::Keyring)
+    let key = keystore::default_key_store()?
+        .load()
         .context("loading the encryption key (run `obsidianlog init` first)")?;
 
     let ingest_config = obsidianlog_ingest::Config {

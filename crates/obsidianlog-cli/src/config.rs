@@ -282,4 +282,23 @@ mod tests {
         let loaded = Config::load(Some(&path)).unwrap();
         assert_eq!(loaded.bucket, "roundtrip");
     }
+
+    #[test]
+    fn save_then_load_round_trips_an_indexd_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let config = Config {
+            indexd: Some(IndexdConfig {
+                url: "https://indexd.example.com".to_string(),
+                bucket: "sia-bucket".to_string(),
+            }),
+            ..Config::default()
+        };
+
+        config.save(Some(&path)).unwrap();
+        let loaded = Config::load(Some(&path)).unwrap();
+        let indexd = loaded.indexd.expect("indexd section must round-trip");
+        assert_eq!(indexd.url, "https://indexd.example.com");
+        assert_eq!(indexd.bucket, "sia-bucket");
+    }
 }
