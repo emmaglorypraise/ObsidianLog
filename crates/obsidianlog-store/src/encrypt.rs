@@ -44,10 +44,26 @@ impl EncryptionKey {
         Self(bytes)
     }
 
+    /// Generate a fresh key from the OS CSPRNG.
+    pub fn generate() -> Result<Self> {
+        let mut bytes = [0u8; KEY_LEN];
+        getrandom::getrandom(&mut bytes)
+            .map_err(|e| Error::Crypto(format!("OS CSPRNG unavailable: {e}")))?;
+        Ok(Self(bytes))
+    }
+
     /// Whether this is the all-zero placeholder key, i.e. no real key has been
     /// configured. Used to warn before archiving with it; never leaks bytes.
     pub fn is_placeholder(&self) -> bool {
         self.0 == [0u8; KEY_LEN]
+    }
+
+    /// Expose the raw key bytes, for handing them across a boundary that needs
+    /// them directly (e.g. persisting to the OS keychain or a secrets file).
+    /// Callers must not log, print, or let the returned bytes outlive the
+    /// handoff.
+    pub fn expose_secret(&self) -> &[u8; KEY_LEN] {
+        &self.0
     }
 }
 
@@ -171,6 +187,29 @@ mod tests {
     fn wrong_key_fails() {
         let ciphertext = encrypt_chunk(&key_a(), NONCE, b"payload").expect("encrypt");
         assert!(decrypt_chunk(&key_b(), NONCE, &ciphertext).is_err());
+    }
+
+    #[test]
+    fn generate_produces_distinct_full_length_keys() {
+        let a = EncryptionKey::generate().unwrap();
+        let b = EncryptionKey::generate().unwrap();
+        assert_ne!(
+            a.expose_secret(),
+            b.expose_secret(),
+            "two generated keys must not collide"
+        );
+        assert_ne!(
+            *a.expose_secret(),
+            [0u8; KEY_LEN],
+            "a generated key must not be the placeholder"
+        );
+    }
+
+    #[test]
+    fn expose_secret_round_trips_the_wrapped_bytes() {
+        let bytes = [0x77; KEY_LEN];
+        let key = EncryptionKey::new(bytes);
+        assert_eq!(*key.expose_secret(), bytes);
     }
 
     #[test]

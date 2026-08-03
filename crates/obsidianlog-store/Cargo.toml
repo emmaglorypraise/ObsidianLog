@@ -25,6 +25,8 @@ aes-gcm = "0.11.0"
 sha2 = "0.11.0"
 # Zeroize-on-drop for the AES key newtype so key bytes don't linger in memory.
 zeroize.workspace = true
+# OS CSPRNG for generating fresh encryption keys.
+getrandom = "0.2"
 # Time-window labels (YYYY-MM-DD-HH) for chunking.
 chrono.workspace = true
 # Async locks (tokio sync) for the ArchiveEngine's per-service serialization.

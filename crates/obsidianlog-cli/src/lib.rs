@@ -7,9 +7,8 @@
 //!
 //! # Status
 //!
-//! The argument surface is complete and dispatches to each command. `serve` is
-//! implemented; `init`, `query`, and `verify` are stubs pending the key store,
-//! query engine, and chain-verification tooling respectively.
+//! The argument surface is complete and dispatches to each command; `init`,
+//! `serve`, `query`, and `verify` are all implemented.
 
 pub mod cli;
 pub mod commands;

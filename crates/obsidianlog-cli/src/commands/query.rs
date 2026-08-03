@@ -17,12 +17,13 @@ use obsidianlog_store::index::IndexQuery;
 
 use crate::cli::{OutputFormat, QueryArgs};
 use crate::config::Config;
-use crate::keystore::{self, KeySource};
+use crate::keystore;
 
 /// Execute a query and render results to stdout.
 pub fn run(args: QueryArgs, config_path: Option<PathBuf>) -> Result<()> {
     let config = Config::load(config_path.as_deref())?;
-    let key = keystore::load(&KeySource::Keyring)
+    let key = keystore::default_key_store()?
+        .load()
         .context("loading the encryption key (run `obsidianlog init` first)")?;
 
     let now = Utc::now();
