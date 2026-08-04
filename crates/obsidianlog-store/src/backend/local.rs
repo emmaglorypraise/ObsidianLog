@@ -303,7 +303,7 @@ mod tests {
         let mut manifest = Manifest::new("obsidianlog");
         manifest
             .services
-            .insert("api".to_string(), ManifestServiceChain::new("api"));
+            .insert("api".to_string(), ManifestServiceChain::new("api", 0));
         backend.write_manifest(&manifest).await.unwrap();
         let fetched = backend.read_manifest().await.unwrap();
         assert_eq!(fetched, manifest);
@@ -395,7 +395,7 @@ mod tests {
                 backend
                     .update_manifest(|m| {
                         m.services
-                            .insert(service.clone(), ManifestServiceChain::new(&service));
+                            .insert(service.clone(), ManifestServiceChain::new(&service, i));
                     })
                     .await
                     .unwrap();

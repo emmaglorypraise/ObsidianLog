@@ -105,14 +105,20 @@ impl<B: StorageBackend> ArchiveEngine<B> {
             _guards.push(self.service_lock(service).lock_owned().await);
         }
 
-        // Seed each service's chain head + next sequence from the current
-        // manifest, then chain forward in memory across the batch's buckets.
-        let seed = self.read_manifest_or_default().await?;
+        // Every touched service must have a durably-assigned, globally-unique
+        // service_id *before* any nonce is derived below (ADR-0009) — this is
+        // what makes cross-service nonce uniqueness unconditional rather than a
+        // hash collision away. Reuses this same read as the chain-head/sequence
+        // seed, so the common case (no new services) costs nothing extra.
+        let seed = self.ensure_service_ids(&services).await?;
         let mut heads: HashMap<String, ([u8; 32], u64)> = HashMap::new();
         let mut new_refs: HashMap<String, Vec<ChunkRef>> = HashMap::new();
         let mut archives: Vec<(Chunk, ServiceWindowIndex)> = Vec::with_capacity(buckets.len());
 
         for bucket in buckets {
+            // `ensure_service_ids` guarantees every touched service is already
+            // present in `seed`, with its permanent service_id.
+            let service_id = seed.services[&bucket.service].service_id;
             let (prev_hash, sequence) = match heads.get(&bucket.service) {
                 Some(&head) => head,
                 None => match seed.services.get(&bucket.service) {
@@ -125,7 +131,7 @@ impl<B: StorageBackend> ArchiveEngine<B> {
             let plaintext = serde_json::to_vec(&bucket.records)?;
             let uncompressed_len = plaintext.len() as u64;
             let compressed = compress(&plaintext, self.compression_level)?;
-            let nonce = derive_nonce(&bucket.service, sequence);
+            let nonce = derive_nonce(service_id, sequence);
             let ciphertext = encrypt_chunk(&self.key, nonce, &compressed)?;
 
             // Assemble + hash the chunk (prev_hash = this service's current head).
@@ -181,10 +187,14 @@ impl<B: StorageBackend> ArchiveEngine<B> {
         let mut manifest = self.read_manifest_or_default().await?;
         for (service, (head, next_sequence)) in heads {
             let refs = new_refs.remove(&service).unwrap_or_default();
+            // `ensure_service_ids` already durably registered every touched
+            // service earlier in this call, so this normally just finds the
+            // existing entry; the fallback keeps its already-assigned id.
+            let service_id = seed.services[&service].service_id;
             let chain = manifest
                 .services
                 .entry(service.clone())
-                .or_insert_with(|| ManifestServiceChain::new(&service));
+                .or_insert_with(|| ManifestServiceChain::new(&service, service_id));
             chain.head_hash = head;
             chain.next_sequence = next_sequence;
             chain.chunks.extend(refs);
@@ -349,6 +359,41 @@ impl<B: StorageBackend> ArchiveEngine<B> {
             Err(Error::NotFound(_)) => Ok(Manifest::new(&self.bucket)),
             Err(e) => Err(e),
         }
+    }
+
+    /// Ensure every service in `services` has a durably-assigned, permanent
+    /// `service_id` in the manifest, then return that manifest (also usable as
+    /// the chain-head/sequence seed for the caller — avoids a second read).
+    ///
+    /// The common case (every service already known) costs a single unlocked
+    /// read, exactly like before ADR-0009. Only when a service is genuinely new
+    /// does this take the `manifest_lock` to read-modify-write: the id must
+    /// come from an authoritative, monotonic `next_service_id` counter, so two
+    /// batches that concurrently introduce *different* new services (an
+    /// interleaving the per-service locks above don't prevent) can't be
+    /// assigned the same id.
+    async fn ensure_service_ids(&self, services: &BTreeSet<String>) -> Result<Manifest> {
+        let unlocked = self.read_manifest_or_default().await?;
+        if services.iter().all(|s| unlocked.services.contains_key(s)) {
+            return Ok(unlocked);
+        }
+
+        let _manifest_guard = self.manifest_lock.lock().await;
+        let mut manifest = self.read_manifest_or_default().await?;
+        for service in services {
+            if !manifest.services.contains_key(service) {
+                let id = manifest.next_service_id;
+                manifest.next_service_id = manifest
+                    .next_service_id
+                    .checked_add(1)
+                    .ok_or_else(|| Error::Backend("service id space exhausted (u32)".into()))?;
+                manifest
+                    .services
+                    .insert(service.clone(), ManifestServiceChain::new(service, id));
+            }
+        }
+        self.backend.write_manifest(&manifest).await?;
+        Ok(manifest)
     }
 
     fn service_lock(&self, service: &str) -> Arc<AsyncMutex<()>> {
@@ -540,6 +585,20 @@ mod tests {
         let backend = CountingBackend::new(&dir);
         let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
 
+        // Register both services first, in a window far from the one used
+        // below (so it can't collide with it). Assigning a service its
+        // manifest id costs a one-time extra write (ADR-0009); this test is
+        // specifically about coalescing writes across a *single* batch's
+        // multiple windows, not about first-time service registration.
+        engine
+            .ingest_batch(LogBatch(vec![
+                record("api", -2, 1_000 * 3600),
+                record("web", -1, 1_000 * 3600),
+            ]))
+            .await
+            .unwrap();
+        let writes_before_test_batch = engine.backend().manifest_writes.load(Ordering::SeqCst);
+
         // One batch whose records span three windows across two services.
         let mut records = Vec::new();
         let mut id = 0;
@@ -555,7 +614,7 @@ mod tests {
 
         // Coalesced: exactly one manifest write for the whole batch, not per window.
         assert_eq!(
-            engine.backend().manifest_writes.load(Ordering::SeqCst),
+            engine.backend().manifest_writes.load(Ordering::SeqCst) - writes_before_test_batch,
             1,
             "the manifest must be written once per batch"
         );
@@ -563,7 +622,11 @@ mod tests {
         // Everything still round-trips with intact chains.
         for service in ["api", "web"] {
             let refs = engine.backend().list_chunks(service, None).await.unwrap();
-            assert_eq!(refs.len(), 3, "one chunk per window");
+            assert_eq!(
+                refs.len(),
+                4,
+                "one chunk per window: 3 from the test batch, 1 from warm-up registration"
+            );
             let chunks = engine.service_chunks(service).await.unwrap();
             assert!(verify_chain(&chunks).is_ok(), "chain must be intact");
         }
