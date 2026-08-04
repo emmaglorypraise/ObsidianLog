@@ -64,6 +64,62 @@ config/key and reuses them; pass `--force` to rotate the key (this makes
 previously archived data undecryptable with the new key, so it asks for
 confirmation unless you're also non-interactive).
 
+**Note:** the CLI currently only supports the **local backend** — `serve`,
+`query`, and `verify` always use `LocalBackend` regardless of what `init`
+writes to the `[indexd]` config section. Wiring the CLI to Sia is Month-3
+work (see [ADR-0007](docs/adr/0007-indexer-topology.md)). To exercise the
+real Sia path today, see [Testing the Sia backend](#testing-the-sia-backend)
+below — it drives `ArchiveEngine`/`SiaBackend` directly via `cargo test`, not
+through the `obsidianlog` binary.
+
+### Testing the CLI end to end, locally
+
+`init` prompts interactively unless you pass `--non-interactive` (which takes
+every default below with no questions asked — the defaults are always the
+local backend, never Sia):
+
+1. `Storage bucket / namespace` — default `obsidianlog`.
+2. `Storage backend` — `local` or `sia`; pick (or default to) **`local`** to
+   stay off Sia entirely.
+3. `Local storage directory` — default `./obsidianlog-data`.
+4. `Ingest server bind address` — default `127.0.0.1:7080`.
+5. `Chunk time window (seconds)` — default `3600`.
+
+Full loop against a scratch location, so nothing touches your real config or
+data directory:
+
+```sh
+cargo build -p obsidianlog-cli
+rm -rf /tmp/obsidianlog-demo && mkdir -p /tmp/obsidianlog-demo
+
+# 1. Set up — generates the key, writes config.toml. Add --non-interactive to
+#    skip the prompts above (always picks local).
+./target/debug/obsidianlog init --config /tmp/obsidianlog-demo/config.toml
+cat /tmp/obsidianlog-demo/config.toml
+
+# 2. Serve — start the ingest server, post a log batch, stop it.
+./target/debug/obsidianlog serve --config /tmp/obsidianlog-demo/config.toml &
+sleep 1
+curl -s -X POST http://localhost:7080/ingest -H 'Content-Type: application/json' \
+  -d '[{"timestamp":"2026-08-04T10:00:00Z","service":"api","level":"info","msg":"hello"}]'
+kill %1
+
+# 3. Query it back.
+./target/debug/obsidianlog query --config /tmp/obsidianlog-demo/config.toml
+
+# 4. Verify the hash chain.
+./target/debug/obsidianlog verify --config /tmp/obsidianlog-demo/config.toml
+```
+
+`init` writes a real entry to your OS keychain (service `obsidianlog`,
+account `encryption-key`). Clean up when you're done:
+
+```sh
+security delete-generic-password -s obsidianlog -a encryption-key   # macOS
+# Linux: your Secret Service frontend (e.g. seahorse); Windows: Credential Manager
+rm -rf /tmp/obsidianlog-demo
+```
+
 ## Architecture
 
 Each log batch passes through a deterministic pipeline before it is stored:
@@ -79,7 +135,7 @@ that keeps storage decoupled from the pipeline.
 flowchart TD
     V["Vector (HTTP sink)"] -->|"POST /ingest"| ING["obsidianlog-ingest<br/>(axum HTTP server)"]
     ING --> PIPE["obsidianlog-store pipeline<br/>parse → zstd → AES-256-GCM → SHA-256 chain → index"]
-    CLI["obsidianlog-cli<br/>query / verify (in progress)"] --> PIPE
+    CLI["obsidianlog-cli<br/>init / serve / query / verify<br/>(local backend only, for now)"] --> PIPE
     PIPE -->|"StorageBackend trait<br/>(obsidianlog-core)"| BK{"Backend"}
     BK --> SIA["SiaBackend → indexd → Sia network"]
     BK --> LOCAL["LocalBackend<br/>(dev / testing)"]
