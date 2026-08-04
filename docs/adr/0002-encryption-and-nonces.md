@@ -3,6 +3,16 @@
 - Status: Accepted
 - Date: 2026-06-29
 
+> **Amended by [ADR-0009](0009-service-id-nonce-discriminator.md) (2026-08-04).**
+> The "zero collision probability" claim below held only for uniqueness
+> *within* one service, not *across* services — the original cross-service
+> discriminator (`SHA-256(service)[..4]`) was a probabilistic 32-bit hash of
+> the service name, not a construction guarantee, and the name is
+> attacker-influenceable. ADR-0009 replaces it with a manifest-assigned
+> `service_id`, making cross-service uniqueness unconditional too. Everything
+> else below (AES-256-GCM, per-service counter-based nonces, the rejected HKDF
+> alternative) is unchanged.
+
 ## Context
 
 Chunks are encrypted client-side, before any data leaves the user's

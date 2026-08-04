@@ -17,7 +17,6 @@
 
 use aes_gcm::aead::{Aead, Nonce};
 use aes_gcm::{Aes256Gcm, Key, KeyInit};
-use sha2::{Digest, Sha256};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::error::{Error, Result};
@@ -75,20 +74,26 @@ impl std::fmt::Debug for EncryptionKey {
     }
 }
 
-/// Derive the deterministic 96-bit nonce for a chunk from its `service` and
-/// per-service `sequence` number.
+/// Derive the deterministic 96-bit nonce for a chunk from its manifest-assigned
+/// `service_id` and per-service `sequence` number.
 ///
-/// Layout: the first 4 bytes are a service discriminator (`SHA-256(service)[..4]`)
-/// and the last 8 bytes are the big-endian sequence. Within one service the
-/// discriminator is constant and the monotonic `sequence` is unique, so a
-/// `(key, nonce)` pair is **never reused for that service** — the guarantee GCM
-/// depends on (see ADR-0002). Across services the 32-bit discriminator makes a
-/// collision negligible for realistic service counts; a manifest-assigned unique
-/// service id would make cross-service uniqueness total.
-pub fn derive_nonce(service: &str, sequence: u64) -> [u8; NONCE_LEN] {
-    let digest = Sha256::digest(service.as_bytes());
+/// Layout: the first 4 bytes are the service's unique id (assigned once, at
+/// first use, from `Manifest::next_service_id` — never derived from the
+/// service *name*, which is attacker-influenceable) and the last 8 bytes are
+/// the big-endian sequence.
+///
+/// Within one service the discriminator is constant and the monotonic
+/// `sequence` is unique, so a `(key, nonce)` pair is never reused for that
+/// service. Across services, uniqueness is now **unconditional**: `service_id`
+/// comes from an authoritative monotonic counter, so two services can never be
+/// assigned the same discriminator (contrast the earlier `SHA-256(name)[..4]`
+/// scheme, where two service *names* could collide in 32 bits — a cheap,
+/// attacker-triggerable search since the name is untrusted input; see
+/// ADR-0009 and `obsidianlog-store/tests/nonce_uniqueness.rs`). Both
+/// properties together satisfy GCM's nonce-uniqueness requirement (ADR-0002).
+pub fn derive_nonce(service_id: u32, sequence: u64) -> [u8; NONCE_LEN] {
     let mut nonce = [0u8; NONCE_LEN];
-    nonce[..4].copy_from_slice(&digest[..4]);
+    nonce[..4].copy_from_slice(&service_id.to_be_bytes());
     nonce[4..].copy_from_slice(&sequence.to_be_bytes());
     nonce
 }
@@ -215,12 +220,29 @@ mod tests {
     #[test]
     fn derive_nonce_is_deterministic_unique_per_sequence() {
         // Deterministic.
-        assert_eq!(derive_nonce("api", 7), derive_nonce("api", 7));
+        assert_eq!(derive_nonce(1, 7), derive_nonce(1, 7));
         // Unique per sequence within a service.
-        assert_ne!(derive_nonce("api", 0), derive_nonce("api", 1));
-        // Different services get different nonces at the same sequence.
-        assert_ne!(derive_nonce("api", 0), derive_nonce("web", 0));
-        // The sequence occupies the low 8 bytes.
-        assert_eq!(derive_nonce("api", 42)[4..], 42u64.to_be_bytes());
+        assert_ne!(derive_nonce(1, 0), derive_nonce(1, 1));
+        // Different service ids get different nonces at the same sequence —
+        // unconditionally, not probabilistically (contrast the old
+        // hash-of-name scheme this replaces; see ADR-0009).
+        assert_ne!(derive_nonce(1, 0), derive_nonce(2, 0));
+        // The service id occupies the high 4 bytes, sequence the low 8.
+        assert_eq!(derive_nonce(1, 42)[..4], 1u32.to_be_bytes());
+        assert_eq!(derive_nonce(1, 42)[4..], 42u64.to_be_bytes());
+    }
+
+    #[test]
+    fn derive_nonce_never_collides_across_many_services_and_sequences() {
+        use std::collections::HashSet;
+        let mut seen = HashSet::new();
+        for service_id in 0u32..500 {
+            for sequence in 0u64..50 {
+                assert!(
+                    seen.insert(derive_nonce(service_id, sequence)),
+                    "nonce collision at service_id={service_id}, sequence={sequence}"
+                );
+            }
+        }
     }
 }

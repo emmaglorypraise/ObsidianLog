@@ -103,7 +103,7 @@ mod tests {
         };
         round_trip(&index);
 
-        let mut chain = ManifestServiceChain::new("api");
+        let mut chain = ManifestServiceChain::new("api", 0);
         chain.next_sequence = 2;
         chain.head_hash = [7u8; 32];
         chain.chunks.push(chunk_ref);
