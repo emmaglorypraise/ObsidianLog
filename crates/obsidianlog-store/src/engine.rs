@@ -203,9 +203,15 @@ impl<B: StorageBackend> ArchiveEngine<B> {
         Ok(())
     }
 
-    /// Read, decrypt, and decompress the records of one `(service, window)` chunk.
-    pub async fn read_records(&self, service: &str, window: &str) -> Result<Vec<LogRecord>> {
-        let chunk = self.backend.get_chunk(service, window).await?;
+    /// Read, decrypt, and decompress the records of one `(service, window,
+    /// sequence)` chunk.
+    pub async fn read_records(
+        &self,
+        service: &str,
+        window: &str,
+        sequence: u64,
+    ) -> Result<Vec<LogRecord>> {
+        let chunk = self.backend.get_chunk(service, window, sequence).await?;
         let compressed = decrypt_chunk(&self.key, chunk.header.nonce, &chunk.ciphertext)?;
         let plaintext = decompress(&compressed)?;
         Ok(serde_json::from_slice(&plaintext)?)
@@ -216,7 +222,11 @@ impl<B: StorageBackend> ArchiveEngine<B> {
         let refs = self.backend.list_chunks(service, None).await?;
         let mut chunks = Vec::with_capacity(refs.len());
         for chunk_ref in refs {
-            chunks.push(self.backend.get_chunk(service, &chunk_ref.window).await?);
+            chunks.push(
+                self.backend
+                    .get_chunk(service, &chunk_ref.window, chunk_ref.sequence)
+                    .await?,
+            );
         }
         Ok(chunks)
     }
@@ -248,7 +258,7 @@ impl<B: StorageBackend> ArchiveEngine<B> {
         for chunk_ref in candidates {
             let index = self
                 .backend
-                .get_index(&chunk_ref.service, &chunk_ref.window)
+                .get_index(&chunk_ref.service, &chunk_ref.window, chunk_ref.sequence)
                 .await?;
             if might_match(&index, query) {
                 surviving.push(chunk_ref);
@@ -259,7 +269,7 @@ impl<B: StorageBackend> ArchiveEngine<B> {
         let mut records = Vec::new();
         for chunk_ref in &surviving {
             records.extend(
-                self.read_records(&chunk_ref.service, &chunk_ref.window)
+                self.read_records(&chunk_ref.service, &chunk_ref.window, chunk_ref.sequence)
                     .await?,
             );
         }
@@ -310,7 +320,11 @@ impl<B: StorageBackend> ArchiveEngine<B> {
 
         let mut chunks = Vec::with_capacity(chain.chunks.len());
         for (position, chunk_ref) in chain.chunks.iter().enumerate() {
-            let chunk = match self.backend.get_chunk(service, &chunk_ref.window).await {
+            let chunk = match self
+                .backend
+                .get_chunk(service, &chunk_ref.window, chunk_ref.sequence)
+                .await
+            {
                 Ok(chunk) => chunk,
                 Err(Error::NotFound(_)) => {
                     return Err(ChainBreak {
@@ -477,7 +491,10 @@ mod tests {
             assert_eq!(refs.len(), 3, "one chunk per window");
             let mut got = BTreeSet::new();
             for r in &refs {
-                got.extend(ids(&engine.read_records(service, &r.window).await.unwrap()));
+                got.extend(ids(&engine
+                    .read_records(service, &r.window, r.sequence)
+                    .await
+                    .unwrap()));
             }
             assert_eq!(&got, &expected[service], "records must round-trip exactly");
 
@@ -555,13 +572,18 @@ mod tests {
         async fn put_archive(&self, chunk: &Chunk, index: &ServiceWindowIndex) -> Result<()> {
             self.inner.put_archive(chunk, index).await
         }
-        async fn get_chunk(&self, service: &str, window: &str) -> Result<Chunk> {
+        async fn get_chunk(&self, service: &str, window: &str, sequence: u64) -> Result<Chunk> {
             self.chunk_reads.fetch_add(1, Ordering::SeqCst);
-            self.inner.get_chunk(service, window).await
+            self.inner.get_chunk(service, window, sequence).await
         }
-        async fn get_index(&self, service: &str, window: &str) -> Result<ServiceWindowIndex> {
+        async fn get_index(
+            &self,
+            service: &str,
+            window: &str,
+            sequence: u64,
+        ) -> Result<ServiceWindowIndex> {
             self.index_reads.fetch_add(1, Ordering::SeqCst);
-            self.inner.get_index(service, window).await
+            self.inner.get_index(service, window, sequence).await
         }
         async fn list_chunks(
             &self,
@@ -844,18 +866,23 @@ mod tests {
         assert_eq!(engine.backend().chunk_reads.load(Ordering::SeqCst), 2);
     }
 
-    fn chunk_file_path(dir: &tempfile::TempDir, service: &str, window: &str) -> std::path::PathBuf {
+    fn chunk_file_path(
+        dir: &tempfile::TempDir,
+        service: &str,
+        window: &str,
+        sequence: u64,
+    ) -> std::path::PathBuf {
         dir.path()
             .join("obsidianlog")
             .join("chunks")
             .join(service)
-            .join(format!("{window}.bin"))
+            .join(format!("{window}-{sequence}.bin"))
     }
 
     /// Flip the last byte of a chunk file on disk — corrupting its ciphertext,
     /// simulating storage-level tampering rather than an in-memory mutation.
-    fn corrupt_chunk_file(dir: &tempfile::TempDir, service: &str, window: &str) {
-        let path = chunk_file_path(dir, service, window);
+    fn corrupt_chunk_file(dir: &tempfile::TempDir, service: &str, window: &str, sequence: u64) {
+        let path = chunk_file_path(dir, service, window, sequence);
         let mut bytes = std::fs::read(&path).unwrap();
         let last = bytes.len() - 1;
         bytes[last] ^= 0xFF;
@@ -898,7 +925,7 @@ mod tests {
         seed_query_fixture(&dir).await;
         // Corrupt api's hour-1 chunk (sequence 1 of 3) — a middle chunk, so
         // verify_chain's own hash-link check must catch it.
-        corrupt_chunk_file(&dir, "api", "1970-01-01-01");
+        corrupt_chunk_file(&dir, "api", "1970-01-01-01", 1);
 
         let backend = LocalBackend::new(dir.path(), "obsidianlog");
         let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
@@ -927,7 +954,7 @@ mod tests {
         // Tamper the LAST chunk (hour-2): verify_chain alone can't catch this —
         // nothing within the chain commits to the last chunk's hash — only the
         // separate manifest-head check can.
-        corrupt_chunk_file(&dir, "api", "1970-01-01-02");
+        corrupt_chunk_file(&dir, "api", "1970-01-01-02", 2);
 
         let backend = LocalBackend::new(dir.path(), "obsidianlog");
         let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
@@ -943,7 +970,7 @@ mod tests {
     async fn verify_detects_a_missing_chunk_file() {
         let dir = tempfile::tempdir().unwrap();
         seed_query_fixture(&dir).await;
-        std::fs::remove_file(chunk_file_path(&dir, "api", "1970-01-01-02")).unwrap();
+        std::fs::remove_file(chunk_file_path(&dir, "api", "1970-01-01-02", 2)).unwrap();
 
         let backend = LocalBackend::new(dir.path(), "obsidianlog");
         let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");

@@ -9,7 +9,7 @@
 //! `sia_storage` is **content-addressed**: uploads return an [`Object`] keyed by
 //! a derived hash, and there is no get-by-path. Each object, however, carries an
 //! arbitrary `metadata: Vec<u8>` blob. We store a small JSON envelope there — the
-//! object's bucket-relative path (`<bucket>/chunks/<service>/<window>.bin`, etc.)
+//! object's bucket-relative path (`<bucket>/chunks/<service>/<window>-<sequence>.bin`, etc.)
 //! plus, for archive objects, the window's index — and resolve reads by scanning
 //! the indexer's object list (`object_events`) for a matching path. A chunk and
 //! its index are therefore **one object** (ADR-0008): the ciphertext is the body
@@ -109,8 +109,11 @@ impl SiaBackend {
         format!("{}/{kind}/{service}/{window}.{ext}", self.bucket)
     }
 
-    fn chunk_path(&self, service: &str, window: &str) -> String {
-        self.object_path("chunks", service, window, "bin")
+    /// `(service, window)` is not a unique object path — a window can hold
+    /// many chunks over its lifetime, one per batch that touches it — so the
+    /// path is keyed on `sequence` too (unique and monotonic per service).
+    fn chunk_path(&self, service: &str, window: &str, sequence: u64) -> String {
+        self.object_path("chunks", service, &format!("{window}-{sequence}"), "bin")
     }
 
     fn manifest_path(&self) -> String {
@@ -191,31 +194,41 @@ impl SiaBackend {
 #[async_trait]
 impl StorageBackend for SiaBackend {
     async fn put_archive(&self, chunk: &Chunk, index: &ServiceWindowIndex) -> Result<()> {
-        // One object per window: the ciphertext frame is the body; the index
-        // rides in the object metadata so reads/lists never download the body.
+        // One object per (service, window, sequence): the ciphertext frame is
+        // the body; the index rides in the object metadata so reads/lists
+        // never download the body.
         let meta = ObjectMeta {
-            path: self.chunk_path(&chunk.header.service, &chunk.header.time_window),
+            path: self.chunk_path(
+                &chunk.header.service,
+                &chunk.header.time_window,
+                chunk.header.sequence,
+            ),
             index: Some(index.clone()),
         };
         self.put_object(&meta, encode_chunk(chunk)?).await
     }
 
-    async fn get_chunk(&self, service: &str, window: &str) -> Result<Chunk> {
-        let path = self.chunk_path(service, window);
+    async fn get_chunk(&self, service: &str, window: &str, sequence: u64) -> Result<Chunk> {
+        let path = self.chunk_path(service, window, sequence);
         let bytes = self
-            .get_object(&path, || format!("chunk {service}/{window}"))
+            .get_object(&path, || format!("chunk {service}/{window}#{sequence}"))
             .await?;
         decode_chunk(&bytes)
     }
 
-    async fn get_index(&self, service: &str, window: &str) -> Result<ServiceWindowIndex> {
+    async fn get_index(
+        &self,
+        service: &str,
+        window: &str,
+        sequence: u64,
+    ) -> Result<ServiceWindowIndex> {
         // The index lives in the chunk object's metadata — no body download.
-        let path = self.chunk_path(service, window);
+        let path = self.chunk_path(service, window, sequence);
         self.find_object(&path)
             .await?
             .and_then(|o| Self::object_meta(&o))
             .and_then(|m| m.index)
-            .ok_or_else(|| Error::NotFound(format!("index {service}/{window}")))
+            .ok_or_else(|| Error::NotFound(format!("index {service}/{window}#{sequence}")))
     }
 
     async fn list_chunks(&self, service: &str, range: Option<TimeRange>) -> Result<Vec<ChunkRef>> {

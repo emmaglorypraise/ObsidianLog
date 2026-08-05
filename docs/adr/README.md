@@ -18,6 +18,7 @@ We follow the lightweight [Michael Nygard format](https://cognitect.com/blog/201
 - [0007 — Indexer topology: hosted-default, bring-your-own-indexer](0007-indexer-topology.md) _(Proposed — Month 3)_
 - [0008 — Reducing Sia object overhead (coalesce manifest, fold index)](0008-sia-object-overhead.md)
 - [0009 — Manifest-assigned service ids as the nonce discriminator](0009-service-id-nonce-discriminator.md)
+- [0010 — Chunk sequence as part of the storage path](0010-sequence-in-storage-path.md)
 
 ## Adding an ADR
 

@@ -41,18 +41,27 @@ pub struct TimeRange {
 #[async_trait]
 pub trait StorageBackend: Send + Sync {
     /// Durably store a `chunk` together with its metadata `index` as one archive
-    /// unit for its `(service, window)`.
+    /// unit for its `(service, window, sequence)`.
     ///
-    /// Backends choose the physical layout — separate objects, or a single
-    /// content-addressed object carrying the index in its metadata (the Sia
-    /// backend) — but **both** parts MUST be durable before returning `Ok`.
+    /// A `(service, window)` pair is **not** a unique storage location — a
+    /// window can legitimately receive many chunks over its lifetime, one per
+    /// batch that touches it, so `sequence` (unique and monotonic per service)
+    /// is what backends must key physical storage on. Backends choose the
+    /// physical layout — separate objects, or a single content-addressed
+    /// object carrying the index in its metadata (the Sia backend) — but
+    /// **both** parts MUST be durable before returning `Ok`.
     async fn put_archive(&self, chunk: &Chunk, index: &ServiceWindowIndex) -> Result<()>;
 
-    /// Fetch the chunk stored for `(service, window)`.
-    async fn get_chunk(&self, service: &str, window: &str) -> Result<Chunk>;
+    /// Fetch the chunk stored for `(service, window, sequence)`.
+    async fn get_chunk(&self, service: &str, window: &str, sequence: u64) -> Result<Chunk>;
 
-    /// Fetch the metadata index for `(service, window)`.
-    async fn get_index(&self, service: &str, window: &str) -> Result<ServiceWindowIndex>;
+    /// Fetch the metadata index for `(service, window, sequence)`.
+    async fn get_index(
+        &self,
+        service: &str,
+        window: &str,
+        sequence: u64,
+    ) -> Result<ServiceWindowIndex>;
 
     /// List chunk references for `service`, optionally restricted to `range`.
     async fn list_chunks(&self, service: &str, range: Option<TimeRange>) -> Result<Vec<ChunkRef>>;

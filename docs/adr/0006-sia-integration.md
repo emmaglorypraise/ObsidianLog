@@ -54,11 +54,13 @@ satisfying our rustls-everywhere rule with no extra configuration.
 derived hash, fetched with `Sdk::object(&Hash256)` — there is no get-by-path, and
 "list" is an `object_events` sync stream. Each object does carry an arbitrary
 `metadata: Vec<u8>`. So `SiaBackend` stores each object's bucket-relative path
-(`<bucket>/chunks/<service>/<window>.bin`, …) in that metadata and resolves reads
-by scanning `object_events` for a matching path. This keeps `LocalBackend` and
-`SiaBackend` interchangeable behind `StorageBackend`. Reads are `O(objects)`; a
-future optimization records each chunk's object id in the manifest for direct
-`Sdk::object` fetches.
+(`<bucket>/chunks/<service>/<window>-<sequence>.bin`, …) in that metadata and
+resolves reads by scanning `object_events` for a matching path. This keeps
+`LocalBackend` and `SiaBackend` interchangeable behind `StorageBackend`. Reads
+are `O(objects)`; a future optimization records each chunk's object id in the
+manifest for direct `Sdk::object` fetches. (The `-<sequence>` suffix was added
+in ADR-0010, after `(service, window)` alone proved not to be a unique path
+when a window received more than one batch.)
 
 Connection uses the reconnect path (`Builder::connected(&AppKey)`) with a saved,
 pre-approved `AppKey`; the interactive first-time approval flow lives in the
