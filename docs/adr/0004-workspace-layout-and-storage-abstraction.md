@@ -46,10 +46,13 @@ The storage layout is fixed (mirrored by `LocalBackend` under its data dir and b
 
 ```
 <root>/
-  index/<service>/<YYYY-MM-DD-HH>.idx     # lightweight metadata, fetched first
-  chunks/<service>/<YYYY-MM-DD-HH>.bin    # encrypted + compressed log data
-  manifest/...                            # per-service chain heads + chunk refs
+  index/<service>/<YYYY-MM-DD-HH>-<sequence>.idx   # lightweight metadata, fetched first
+  chunks/<service>/<YYYY-MM-DD-HH>-<sequence>.bin  # encrypted + compressed log data
+  manifest/...                                      # per-service chain heads + chunk refs
 ```
+
+(The `-<sequence>` suffix was added in ADR-0010: `(service, window)` alone is not
+a unique storage location when a window receives more than one batch.)
 
 ## Consequences
 

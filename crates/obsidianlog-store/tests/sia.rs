@@ -110,7 +110,7 @@ async fn sia_end_to_end_when_indexd_available() {
         let mut got = BTreeSet::new();
         for r in &refs {
             got.extend(ids(&engine
-                .read_records(service, &r.window)
+                .read_records(service, &r.window, r.sequence)
                 .await
                 .expect("read")));
         }

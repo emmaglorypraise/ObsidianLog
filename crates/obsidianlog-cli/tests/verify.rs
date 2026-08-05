@@ -75,12 +75,14 @@ async fn verify_exits_zero_for_an_intact_archive_and_nonzero_after_corruption() 
     assert!(stdout.contains("OK") && stdout.contains("api"), "{stdout}");
 
     // Corrupt the hour-1 chunk file directly on disk (a middle chunk, so the
-    // hash-link check — not just the head check — must catch it).
+    // hash-link check — not just the head check — must catch it). Sequence 1:
+    // the seed loop ingests hour 0/1/2 as three separate batches for "api",
+    // so hour 1 is the second chunk written.
     let chunk_path = data_dir
         .join("obsidianlog")
         .join("chunks")
         .join("api")
-        .join("1970-01-01-01.bin");
+        .join("1970-01-01-01-1.bin");
     let mut bytes = std::fs::read(&chunk_path).unwrap();
     let last = bytes.len() - 1;
     bytes[last] ^= 0xFF;

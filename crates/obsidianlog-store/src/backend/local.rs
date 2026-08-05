@@ -5,10 +5,15 @@
 //! backend:
 //!
 //! ```text
-//! <root>/<bucket>/index/<service>/<window>.idx     # ServiceWindowIndex (JSON)
-//! <root>/<bucket>/chunks/<service>/<window>.bin     # framed chunk (header + ciphertext)
-//! <root>/<bucket>/manifest.json                      # Manifest (JSON)
+//! <root>/<bucket>/index/<service>/<window>-<sequence>.idx     # ServiceWindowIndex (JSON)
+//! <root>/<bucket>/chunks/<service>/<window>-<sequence>.bin     # framed chunk (header + ciphertext)
+//! <root>/<bucket>/manifest.json                                 # Manifest (JSON)
 //! ```
+//!
+//! `sequence` (unique and monotonic per service) is part of the path, not just
+//! `window`: a window can legitimately receive many chunks over its lifetime
+//! (one per batch that touches it), so `(service, window)` alone is not a
+//! unique storage location.
 //!
 //! Every write is **durable and atomic**: data is written to a temporary file in
 //! the destination directory, `fsync`'d, then renamed into place, after which the
@@ -72,20 +77,23 @@ impl LocalBackend {
         self.root.join(&self.bucket)
     }
 
-    fn chunk_path(&self, service: &str, window: &str) -> Result<PathBuf> {
+    /// `(service, window)` is not a unique storage location — a window can
+    /// hold many chunks over its lifetime, one per batch that touches it — so
+    /// the path is keyed on `sequence` too (unique and monotonic per service).
+    fn chunk_path(&self, service: &str, window: &str, sequence: u64) -> Result<PathBuf> {
         Ok(self
             .bucket_dir()
             .join("chunks")
             .join(safe(service)?)
-            .join(format!("{}.bin", safe(window)?)))
+            .join(format!("{}-{sequence}.bin", safe(window)?)))
     }
 
-    fn index_path(&self, service: &str, window: &str) -> Result<PathBuf> {
+    fn index_path(&self, service: &str, window: &str, sequence: u64) -> Result<PathBuf> {
         Ok(self
             .bucket_dir()
             .join("index")
             .join(safe(service)?)
-            .join(format!("{}.idx", safe(window)?)))
+            .join(format!("{}-{sequence}.idx", safe(window)?)))
     }
 
     fn manifest_path(&self) -> PathBuf {
@@ -121,21 +129,30 @@ impl StorageBackend for LocalBackend {
     async fn put_archive(&self, chunk: &Chunk, index: &ServiceWindowIndex) -> Result<()> {
         // No per-object floor on a filesystem, so keep the chunk and its index as
         // separate files (cheap independent reads); both are durable on return.
-        let chunk_path = self.chunk_path(&chunk.header.service, &chunk.header.time_window)?;
+        let chunk_path = self.chunk_path(
+            &chunk.header.service,
+            &chunk.header.time_window,
+            chunk.header.sequence,
+        )?;
         atomic_write(&chunk_path, &encode_chunk(chunk)?)?;
-        let index_path = self.index_path(&index.service, &index.window)?;
+        let index_path = self.index_path(&index.service, &index.window, index.chunk.sequence)?;
         atomic_write(&index_path, &serde_json::to_vec(index)?)
     }
 
-    async fn get_chunk(&self, service: &str, window: &str) -> Result<Chunk> {
-        let path = self.chunk_path(service, window)?;
-        let bytes = read_file(&path, || format!("chunk {service}/{window}"))?;
+    async fn get_chunk(&self, service: &str, window: &str, sequence: u64) -> Result<Chunk> {
+        let path = self.chunk_path(service, window, sequence)?;
+        let bytes = read_file(&path, || format!("chunk {service}/{window}#{sequence}"))?;
         decode_chunk(&bytes)
     }
 
-    async fn get_index(&self, service: &str, window: &str) -> Result<ServiceWindowIndex> {
-        let path = self.index_path(service, window)?;
-        let bytes = read_file(&path, || format!("index {service}/{window}"))?;
+    async fn get_index(
+        &self,
+        service: &str,
+        window: &str,
+        sequence: u64,
+    ) -> Result<ServiceWindowIndex> {
+        let path = self.index_path(service, window, sequence)?;
+        let bytes = read_file(&path, || format!("index {service}/{window}#{sequence}"))?;
         Ok(serde_json::from_slice(&bytes)?)
     }
 
@@ -281,8 +298,33 @@ mod tests {
             .put_archive(&original, &index("api", "2026-06-29-15", 0, 100, 200))
             .await
             .unwrap();
-        let fetched = backend.get_chunk("api", "2026-06-29-15").await.unwrap();
+        let fetched = backend.get_chunk("api", "2026-06-29-15", 0).await.unwrap();
         assert_eq!(fetched, original);
+    }
+
+    /// Two chunks with the SAME `(service, window)` but different sequences —
+    /// exactly what two separate batches touching the same hour produce — must
+    /// not collide. Regression test: this used to silently overwrite.
+    #[tokio::test]
+    async fn same_window_different_sequence_does_not_collide() {
+        let (_dir, backend) = backend();
+        let first = chunk("api", "2026-06-29-15", 0, &[0x01, 0x02]);
+        let second = chunk("api", "2026-06-29-15", 1, &[0x03, 0x04, 0x05]);
+
+        backend
+            .put_archive(&first, &index("api", "2026-06-29-15", 0, 100, 200))
+            .await
+            .unwrap();
+        backend
+            .put_archive(&second, &index("api", "2026-06-29-15", 1, 200, 300))
+            .await
+            .unwrap();
+
+        let fetched_first = backend.get_chunk("api", "2026-06-29-15", 0).await.unwrap();
+        let fetched_second = backend.get_chunk("api", "2026-06-29-15", 1).await.unwrap();
+        assert_eq!(fetched_first, first, "the first chunk must survive intact");
+        assert_eq!(fetched_second, second);
+        assert_ne!(fetched_first, fetched_second);
     }
 
     #[tokio::test]
@@ -293,7 +335,7 @@ mod tests {
             .put_archive(&chunk("api", "2026-06-29-15", 0, &[0xAB]), &original)
             .await
             .unwrap();
-        let fetched = backend.get_index("api", "2026-06-29-15").await.unwrap();
+        let fetched = backend.get_index("api", "2026-06-29-15", 0).await.unwrap();
         assert_eq!(fetched, original);
     }
 
@@ -313,11 +355,11 @@ mod tests {
     async fn missing_objects_return_not_found() {
         let (_dir, backend) = backend();
         assert!(matches!(
-            backend.get_chunk("api", "nope").await,
+            backend.get_chunk("api", "nope", 0).await,
             Err(Error::NotFound(_))
         ));
         assert!(matches!(
-            backend.get_index("api", "nope").await,
+            backend.get_index("api", "nope", 0).await,
             Err(Error::NotFound(_))
         ));
         assert!(matches!(

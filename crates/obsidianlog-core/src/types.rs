@@ -1,11 +1,7 @@
 //! Shared domain types: the value vocabulary that crosses crate boundaries.
 //!
 //! Everything here is small, pure, and dependency-light so it can be referenced
-//! from the pipeline, the backends, the ingest service, and the CLI alike. The
-//! `obsidianlog-store` modules re-export these from their semantic homes (e.g.
-//! `obsidianlog_store::chunk::ChunkId`) so call sites read naturally.
-
-use serde::{Deserialize, Serialize};
+//! from the pipeline, the backends, the ingest service, and the CLI alike.
 
 /// Size of an AES-256 key, in bytes.
 pub const KEY_LEN: usize = 32;
@@ -24,28 +20,3 @@ pub type ChunkHash = [u8; 32];
 /// Chains are maintained **per service** (see ADR-0003), so each service's first
 /// chunk uses this value as its `prev_hash`.
 pub const GENESIS: ChunkHash = [0u8; 32];
-
-/// Identifies a chunk by service and time window.
-///
-/// On-Sia / on-disk layout is fixed by [`ChunkId::chunk_path`] /
-/// [`ChunkId::index_path`]; backends store objects at these bucket-relative
-/// paths.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ChunkId {
-    /// Service the chunk belongs to (also the hash-chain partition key).
-    pub service: String,
-    /// Time-window label, formatted `YYYY-MM-DD-HH`.
-    pub window: String,
-}
-
-impl ChunkId {
-    /// Storage path of this chunk's encrypted body, relative to the bucket root.
-    pub fn chunk_path(&self) -> String {
-        format!("chunks/{}/{}.bin", self.service, self.window)
-    }
-
-    /// Storage path of this chunk's metadata index, relative to the bucket root.
-    pub fn index_path(&self) -> String {
-        format!("index/{}/{}.idx", self.service, self.window)
-    }
-}

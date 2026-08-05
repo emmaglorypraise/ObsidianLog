@@ -73,7 +73,11 @@ async fn accepts_a_vector_batch_and_archives_it() {
     assert!(verify_chain(&chunks).is_ok(), "chain must verify");
 
     let records = engine
-        .read_records("api", &chunks[0].header.time_window)
+        .read_records(
+            "api",
+            &chunks[0].header.time_window,
+            chunks[0].header.sequence,
+        )
         .await
         .unwrap();
     assert_eq!(records.len(), 2, "both events must round-trip");

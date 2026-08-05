@@ -9,7 +9,6 @@ use std::collections::BTreeSet;
 use chrono::{DateTime, Utc};
 
 use obsidianlog_core::record::{LogBatch, LogRecord};
-use obsidianlog_core::types::ChunkId;
 use obsidianlog_store::ArchiveEngine;
 use obsidianlog_store::backend::{LocalBackend, StorageBackend};
 use obsidianlog_store::chain::{ChainBreakKind, verify_chain};
@@ -48,17 +47,6 @@ fn ids(records: &[LogRecord]) -> BTreeSet<i64> {
         .collect()
 }
 
-#[test]
-fn chunk_paths_follow_on_sia_layout() {
-    // Needs no pipeline logic; locks the on-storage layout.
-    let id = ChunkId {
-        service: "api".to_string(),
-        window: "2026-06-22-15".to_string(),
-    };
-    assert_eq!(id.chunk_path(), "chunks/api/2026-06-22-15.bin");
-    assert_eq!(id.index_path(), "index/api/2026-06-22-15.idx");
-}
-
 #[tokio::test]
 async fn roundtrip_preserves_log_batch() {
     let dir = tempfile::tempdir().unwrap();
@@ -71,7 +59,10 @@ async fn roundtrip_preserves_log_batch() {
     // One window → one chunk; read it back through decrypt + decompress.
     let refs = engine.backend().list_chunks("api", None).await.unwrap();
     assert_eq!(refs.len(), 1);
-    let recovered = engine.read_records("api", &refs[0].window).await.unwrap();
+    let recovered = engine
+        .read_records("api", &refs[0].window, refs[0].sequence)
+        .await
+        .unwrap();
     assert_eq!(ids(&recovered), expected, "records must round-trip exactly");
 }
 
@@ -89,7 +80,11 @@ async fn tampered_chunk_breaks_the_chain() {
     }
 
     // Corrupt the middle chunk's ciphertext on disk (flip its last byte).
-    let middle = dir.path().join("obsidianlog/chunks/api/1970-01-01-01.bin");
+    // Sequence 1: hour 0/1/2 are ingested as three separate batches, so hour 1
+    // is the second chunk written.
+    let middle = dir
+        .path()
+        .join("obsidianlog/chunks/api/1970-01-01-01-1.bin");
     let mut bytes = std::fs::read(&middle).unwrap();
     *bytes.last_mut().unwrap() ^= 0x01;
     std::fs::write(&middle, &bytes).unwrap();
