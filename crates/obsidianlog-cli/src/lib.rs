@@ -10,6 +10,7 @@
 //! The argument surface is complete and dispatches to each command; `init`,
 //! `serve`, `query`, and `verify` are all implemented.
 
+pub mod backend;
 pub mod cli;
 pub mod commands;
 pub mod config;

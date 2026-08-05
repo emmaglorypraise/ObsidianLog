@@ -8,6 +8,8 @@
 //!   Sia node — the mock-first invariant (see ADR-0004).
 //! - [`sia`] — [`SiaBackend`], the real Sia integration. Compiled only with the
 //!   `sia` feature so the pre-1.0 Sia SDK never enters a default build (ADR-0006).
+//! - [`any`] — [`AnyBackend`], for callers (the CLI) that only learn which
+//!   backend to use from config at runtime, not at compile time.
 //!
 //! Backends are append-only: written chunks are never modified or deleted
 //! post-write, and every write is made durable before it returns `Ok`.
@@ -22,6 +24,9 @@ use obsidianlog_core::error::{Error, Result};
 use obsidianlog_core::index::ServiceWindowIndex;
 
 pub use obsidianlog_core::backend::StorageBackend;
+
+pub mod any;
+pub use any::AnyBackend;
 
 pub mod local;
 pub use local::LocalBackend;

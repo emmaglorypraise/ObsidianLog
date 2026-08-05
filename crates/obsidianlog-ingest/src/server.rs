@@ -19,7 +19,7 @@ use chrono::Utc;
 
 use obsidianlog_core::record::LogBatch;
 use obsidianlog_store::ArchiveEngine;
-use obsidianlog_store::backend::LocalBackend;
+use obsidianlog_store::backend::StorageBackend;
 use obsidianlog_store::parse::parse_value;
 
 use crate::error::{Error, Result};
@@ -27,13 +27,14 @@ use crate::error::{Error, Result};
 /// The path Vector's HTTP sink posts batches to.
 pub const INGEST_PATH: &str = "/ingest";
 
-/// Shared engine state; one filesystem-backed engine serves all requests.
-pub type SharedEngine = Arc<ArchiveEngine<LocalBackend>>;
+/// Shared engine state; one engine (over whichever backend `B` is) serves all
+/// requests.
+pub type SharedEngine<B> = Arc<ArchiveEngine<B>>;
 
 /// Build the ingest router: `POST /ingest` and `GET /health`.
-pub fn build_router(engine: SharedEngine) -> Router {
+pub fn build_router<B: StorageBackend + Send + Sync + 'static>(engine: SharedEngine<B>) -> Router {
     Router::new()
-        .route(INGEST_PATH, post(ingest))
+        .route(INGEST_PATH, post(ingest::<B>))
         .route("/health", get(health))
         .with_state(engine)
 }
@@ -43,7 +44,10 @@ async fn health() -> StatusCode {
 }
 
 /// Archive a batch, then acknowledge (write-then-ack).
-async fn ingest(State(engine): State<SharedEngine>, body: Bytes) -> Response {
+async fn ingest<B: StorageBackend + Send + Sync + 'static>(
+    State(engine): State<SharedEngine<B>>,
+    body: Bytes,
+) -> Response {
     let batch = match parse_batch(&body) {
         Ok(batch) => batch,
         // Malformed envelope → 400 (Vector should not retry a bad payload).
