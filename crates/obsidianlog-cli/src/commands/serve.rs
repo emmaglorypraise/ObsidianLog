@@ -8,6 +8,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 
+use obsidianlog_store::encrypt::EncryptionKey;
+
 use crate::cli::ServeArgs;
 use crate::config::Config;
 use crate::keystore;
@@ -15,9 +17,11 @@ use crate::keystore;
 /// Start the ingest server (blocks until shutdown).
 pub fn run(args: ServeArgs, config_path: Option<PathBuf>) -> Result<()> {
     let config = Config::load(config_path.as_deref())?;
-    let key = keystore::default_key_store()?
-        .load()
-        .context("loading the encryption key (run `obsidianlog init` first)")?;
+    let key = EncryptionKey::new(
+        keystore::default_encryption_key_store()?
+            .load()
+            .context("loading the encryption key (run `obsidianlog init` first)")?,
+    );
 
     let ingest_config = obsidianlog_ingest::Config {
         bind: args.bind.unwrap_or(config.serve.bind),

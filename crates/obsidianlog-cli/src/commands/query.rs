@@ -13,6 +13,7 @@ use chrono::{DateTime, Duration, Utc};
 use obsidianlog_core::record::LogRecord;
 use obsidianlog_store::ArchiveEngine;
 use obsidianlog_store::backend::LocalBackend;
+use obsidianlog_store::encrypt::EncryptionKey;
 use obsidianlog_store::index::IndexQuery;
 
 use crate::cli::{OutputFormat, QueryArgs};
@@ -22,9 +23,11 @@ use crate::keystore;
 /// Execute a query and render results to stdout.
 pub fn run(args: QueryArgs, config_path: Option<PathBuf>) -> Result<()> {
     let config = Config::load(config_path.as_deref())?;
-    let key = keystore::default_key_store()?
-        .load()
-        .context("loading the encryption key (run `obsidianlog init` first)")?;
+    let key = EncryptionKey::new(
+        keystore::default_encryption_key_store()?
+            .load()
+            .context("loading the encryption key (run `obsidianlog init` first)")?,
+    );
 
     let now = Utc::now();
     let since = args
