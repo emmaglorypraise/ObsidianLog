@@ -12,10 +12,10 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use obsidianlog_core::record::LogRecord;
 use obsidianlog_store::ArchiveEngine;
-use obsidianlog_store::backend::LocalBackend;
 use obsidianlog_store::encrypt::EncryptionKey;
 use obsidianlog_store::index::IndexQuery;
 
+use crate::backend::resolve_backend;
 use crate::cli::{OutputFormat, QueryArgs};
 use crate::config::Config;
 use crate::keystore;
@@ -46,14 +46,16 @@ pub fn run(args: QueryArgs, config_path: Option<PathBuf>) -> Result<()> {
         keyword: args.keyword,
     };
 
-    let backend = LocalBackend::new(&config.local.data_dir, &config.bucket);
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("starting the query runtime")?;
+
+    let backend = runtime.block_on(resolve_backend(&config))?;
     let engine = ArchiveEngine::new(backend, key, config.bucket.clone())
         .with_window_secs(config.chunking.window_secs);
 
-    let mut records = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .context("starting the query runtime")?
+    let mut records = runtime
         .block_on(engine.query(&index_query))
         .context("running the query")?;
     records.sort_by_key(|r| r.timestamp);

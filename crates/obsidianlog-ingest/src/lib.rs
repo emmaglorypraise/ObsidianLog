@@ -20,7 +20,7 @@ pub use error::{Error, Result};
 use std::sync::Arc;
 
 use obsidianlog_store::ArchiveEngine;
-use obsidianlog_store::backend::LocalBackend;
+use obsidianlog_store::backend::{LocalBackend, StorageBackend};
 
 use crate::server::{SharedEngine, build_router};
 
@@ -38,14 +38,52 @@ pub fn build_engine(config: &Config) -> ArchiveEngine<LocalBackend> {
 /// Serve the ingest router on `listener` until it is closed (no signal handling).
 ///
 /// Useful for tests that bind an ephemeral port themselves; production callers
-/// use [`serve`].
-pub async fn serve_on(listener: tokio::net::TcpListener, engine: SharedEngine) -> Result<()> {
+/// use [`serve`] (or [`serve_engine`]/[`serve_engine_blocking`] when the
+/// backend was chosen by the caller rather than always `LocalBackend`).
+pub async fn serve_on<B: StorageBackend + Send + Sync + 'static>(
+    listener: tokio::net::TcpListener,
+    engine: SharedEngine<B>,
+) -> Result<()> {
     axum::serve(listener, build_router(engine))
         .await
         .map_err(|e| Error::Serve(e.to_string()))
 }
 
-/// Run the ingest server until shutdown (Ctrl-C), binding `config.bind`.
+/// Run the ingest server on `bind` until shutdown (Ctrl-C), over an
+/// already-built `engine`. The backend-agnostic counterpart to [`serve`], for
+/// callers (the CLI) that pick the backend themselves — e.g. Local vs Sia,
+/// from config — rather than always using [`build_engine`]'s `LocalBackend`.
+pub async fn serve_engine<B: StorageBackend + Send + Sync + 'static>(
+    bind: &str,
+    engine: ArchiveEngine<B>,
+) -> Result<()> {
+    let engine = Arc::new(engine);
+    let listener = tokio::net::TcpListener::bind(bind)
+        .await
+        .map_err(|e| Error::Serve(format!("bind {bind}: {e}")))?;
+
+    axum::serve(listener, build_router(engine))
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .map_err(|e| Error::Serve(e.to_string()))
+}
+
+/// Synchronous entry point for callers without an async runtime: builds a
+/// multi-thread Tokio runtime and blocks on [`serve_engine`].
+pub fn serve_engine_blocking<B: StorageBackend + Send + Sync + 'static>(
+    bind: &str,
+    engine: ArchiveEngine<B>,
+) -> Result<()> {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(serve_engine(bind, engine))
+}
+
+/// Run the ingest server until shutdown (Ctrl-C), binding `config.bind` and
+/// archiving to a filesystem [`LocalBackend`] built from `config`. The
+/// simple, local-only entry point — used by the standalone
+/// `obsidianlog-ingest` binary, which has no reason to support Sia directly.
 pub async fn serve(config: Config) -> Result<()> {
     if config.encryption_key.is_placeholder() {
         eprintln!(
@@ -53,16 +91,7 @@ pub async fn serve(config: Config) -> Result<()> {
              set a real key before archiving production data"
         );
     }
-
-    let engine = Arc::new(build_engine(&config));
-    let listener = tokio::net::TcpListener::bind(&config.bind)
-        .await
-        .map_err(|e| Error::Serve(format!("bind {}: {e}", config.bind)))?;
-
-    axum::serve(listener, build_router(engine))
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .map_err(|e| Error::Serve(e.to_string()))
+    serve_engine(&config.bind, build_engine(&config)).await
 }
 
 /// Synchronous entry point for callers without an async runtime (e.g. the CLI):
