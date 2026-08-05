@@ -50,19 +50,24 @@ impl StorageBackend for AnyBackend {
         }
     }
 
-    async fn get_chunk(&self, service: &str, window: &str) -> Result<Chunk> {
+    async fn get_chunk(&self, service: &str, window: &str, sequence: u64) -> Result<Chunk> {
         match self {
-            Self::Local(b) => b.get_chunk(service, window).await,
+            Self::Local(b) => b.get_chunk(service, window, sequence).await,
             #[cfg(feature = "sia")]
-            Self::Sia(b) => b.get_chunk(service, window).await,
+            Self::Sia(b) => b.get_chunk(service, window, sequence).await,
         }
     }
 
-    async fn get_index(&self, service: &str, window: &str) -> Result<ServiceWindowIndex> {
+    async fn get_index(
+        &self,
+        service: &str,
+        window: &str,
+        sequence: u64,
+    ) -> Result<ServiceWindowIndex> {
         match self {
-            Self::Local(b) => b.get_index(service, window).await,
+            Self::Local(b) => b.get_index(service, window, sequence).await,
             #[cfg(feature = "sia")]
-            Self::Sia(b) => b.get_index(service, window).await,
+            Self::Sia(b) => b.get_index(service, window, sequence).await,
         }
     }
 
@@ -112,7 +117,7 @@ mod tests {
 
         assert!(backend.list_chunks("api", None).await.unwrap().is_empty());
         assert!(matches!(
-            backend.get_chunk("api", "no-such-window").await,
+            backend.get_chunk("api", "no-such-window", 0).await,
             Err(obsidianlog_core::Error::NotFound(_))
         ));
     }
