@@ -19,6 +19,7 @@ We follow the lightweight [Michael Nygard format](https://cognitect.com/blog/201
 - [0008 — Reducing Sia object overhead (coalesce manifest, fold index)](0008-sia-object-overhead.md)
 - [0009 — Manifest-assigned service ids as the nonce discriminator](0009-service-id-nonce-discriminator.md)
 - [0010 — Chunk sequence as part of the storage path](0010-sequence-in-storage-path.md)
+- [0011 — The standalone ingest binary requires an explicit encryption key](0011-ingest-binary-requires-explicit-key.md)
 
 ## Adding an ADR
 

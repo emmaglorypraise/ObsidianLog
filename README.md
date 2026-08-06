@@ -16,11 +16,19 @@ Build from source (not yet published to crates.io):
 cargo build --release
 ```
 
-Run the Vector-compatible ingest server (defaults to `127.0.0.1:7080`):
+Run the Vector-compatible ingest server (defaults to `127.0.0.1:7080`). The
+standalone binary never reads its encryption key from the config file — it
+refuses to start until you pass one via `OBSIDIANLOG_ENCRYPTION_KEY` (a
+64-character hex string) or `OBSIDIANLOG_ENCRYPTION_KEY_FILE` (a path to a
+file containing that string — the convention for a mounted Docker/Kubernetes
+secret). For a quick local run:
 
 ```sh
-./target/release/obsidianlog-ingest
+OBSIDIANLOG_ENCRYPTION_KEY=$(openssl rand -hex 32) ./target/release/obsidianlog-ingest
 ```
+
+(The `obsidianlog` CLI's `init`/`serve` below manage this key for you instead
+of requiring the env var — see [Using the `obsidianlog` CLI](#using-the-obsidianlog-cli).)
 
 Send it a batch and watch it get archived:
 

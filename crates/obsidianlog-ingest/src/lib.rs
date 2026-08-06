@@ -84,12 +84,17 @@ pub fn serve_engine_blocking<B: StorageBackend + Send + Sync + 'static>(
 /// archiving to a filesystem [`LocalBackend`] built from `config`. The
 /// simple, local-only entry point — used by the standalone
 /// `obsidianlog-ingest` binary, which has no reason to support Sia directly.
+///
+/// Refuses to start with the placeholder (all-zero) encryption key — see
+/// [`config::encryption_key_from_env`] for how the standalone binary supplies
+/// a real one.
 pub async fn serve(config: Config) -> Result<()> {
     if config.encryption_key.is_placeholder() {
-        eprintln!(
-            "warning: ingest is running with an all-zero encryption key; \
-             set a real key before archiving production data"
-        );
+        return Err(Error::Config(
+            "refusing to start with an all-zero encryption key; see \
+             config::encryption_key_from_env for how to supply a real one"
+                .to_string(),
+        ));
     }
     serve_engine(&config.bind, build_engine(&config)).await
 }
@@ -105,4 +110,22 @@ pub fn serve_blocking(config: Config) -> Result<()> {
 
 async fn shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn serve_refuses_a_placeholder_encryption_key() {
+        // Config::default()'s encryption_key is the all-zero placeholder, and
+        // serve() must reject it before ever attempting to bind a socket.
+        let err = serve(Config::default())
+            .await
+            .expect_err("must refuse to start with no real key");
+        assert!(
+            err.to_string().contains("encryption key"),
+            "error should explain what's wrong: {err}"
+        );
+    }
 }
