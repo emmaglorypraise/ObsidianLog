@@ -1,0 +1,46 @@
+# Example Vector configuration for the Docker Compose quickstart.
+#
+# Adapted from ../crates/obsidianlog-ingest/examples/vector.toml — same shape,
+# just pointed at the composed `obsidianlog` service instead of localhost.
+#
+# Run Vector against this file from the host (simplest — no extra compose
+# service needed):
+#
+#   vector --config docker/vector.toml
+#
+# Since `obsidianlog`'s port is published (`7080:7080` in docker-compose.yml),
+# `uri` below uses `localhost` — the same address whether ObsidianLog is
+# running in Docker or natively. If you'd rather run Vector as its own
+# container on the compose network instead, swap the `uri` below for
+# `http://obsidianlog:7080/ingest` (Compose's built-in service-name DNS) and
+# add a `vector` service to docker-compose.yml using the `timberio/vector`
+# image with this file mounted in.
+
+# --- Source: tail your application's log files (swap for your real source) ---
+[sources.app_logs]
+type = "file"
+include = ["/var/log/myapp/*.log"]
+
+# --- Optional: parse each line into structured fields ObsidianLog indexes on ---
+# ObsidianLog reads `timestamp`, `service`, `level`, `host`, `trace_id` when
+# present, and tolerates anything missing.
+[transforms.structure]
+type = "remap"
+inputs = ["app_logs"]
+source = '''
+  . = object!(parse_json(.message) ?? { "message": .message })
+  .service = .service || "myapp"
+'''
+
+# --- Sink: POST batches to the ObsidianLog ingest endpoint ---
+[sinks.obsidianlog]
+type = "http"
+inputs = ["structure"]
+uri = "http://localhost:7080/ingest"
+method = "post"
+encoding.codec = "json"        # sends each batch as a JSON array of events
+
+# Retry on ObsidianLog's 5xx (durable-write failures); Vector buffers meanwhile.
+request.retry_attempts = 10
+batch.max_bytes = 10485760     # 10 MiB
+batch.timeout_secs = 5

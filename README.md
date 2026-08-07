@@ -6,7 +6,7 @@
 
 ObsidianLog sits alongside your hot observability stack (Datadog, Grafana, ELK) as a **cold-tier destination**. Logs flow into your active tools for monitoring, then archive to Sia: encrypted before they leave your infrastructure, compressed, hash-chained for tamper-evidence, and queryable at a fraction of the cost — with the keys and contracts owned entirely by you.
 
-> **Status:** the storage pipeline, HTTP ingest server, and `obsidianlog` CLI (`init`, `serve`, `query`, `verify`) all work and are tested end to end — logs come in, get compressed, encrypted, hash-chained, and indexed, and are retrievable and chain-verifiable, **including against real Sia** (see [Testing the Sia backend](#testing-the-sia-backend)). Cross-platform release binaries and a Docker Compose quickstart are still in progress; see the [roadmap](#roadmap).
+> **Status:** the storage pipeline, HTTP ingest server, and `obsidianlog` CLI (`init`, `serve`, `query`, `verify`) all work and are tested end to end — logs come in, get compressed, encrypted, hash-chained, and indexed, and are retrievable and chain-verifiable, **including against real Sia** (see [Testing the Sia backend](#testing-the-sia-backend)). A [Docker Compose quickstart](#docker-compose-quickstart) is available; cross-platform release binaries are still in progress — see the [roadmap](#roadmap).
 
 ## Try it
 
@@ -128,6 +128,78 @@ security delete-generic-password -s obsidianlog -a encryption-key   # macOS
 rm -rf /tmp/obsidianlog-demo
 ```
 
+## Docker Compose quickstart
+
+`docker/docker-compose.yml` runs the ingest server in a container against the
+**local backend** by default — no Sia node, no wallet, nothing beyond Docker
+itself. Real Sia storage via a self-hosted `indexd` is available too, but it
+needs its own manual, one-time setup (a real wallet seed, at minimum) that
+can't be scripted into `docker compose up` — see
+[Optional: real Sia storage via indexd](#optional-real-sia-storage-via-indexd)
+below.
+
+### The local-backend path
+
+```sh
+# 1. Start the ingest server (builds the image on first run).
+docker compose -f docker/docker-compose.yml up -d obsidianlog
+
+# 2. One-time setup: generates the encryption key (stored inside the
+#    container's persistent volume, not your host keychain) and config.toml
+#    (written to ./docker/config, so you can inspect/edit it).
+docker compose -f docker/docker-compose.yml run --rm obsidianlog \
+  init --non-interactive --config /etc/obsidianlog/config.toml
+
+# 3. Restart so the now-configured server picks up the generated key.
+docker compose -f docker/docker-compose.yml restart obsidianlog
+
+# 4. Send a test log.
+curl -s -X POST http://localhost:7080/ingest \
+  -H 'content-type: application/json' \
+  -d '[{"timestamp":"2026-08-06T10:00:00Z","service":"api","level":"info","msg":"hello from docker"}]'
+
+# 5. Query it back.
+docker compose -f docker/docker-compose.yml run --rm obsidianlog \
+  query --config /etc/obsidianlog/config.toml --service api
+
+# 6. Verify the hash chain.
+docker compose -f docker/docker-compose.yml run --rm obsidianlog \
+  verify --config /etc/obsidianlog/config.toml
+```
+
+The encryption key and archived data live in the `obsidianlog-data` named
+volume — they survive `docker compose restart`/`down` (without `-v`), so you
+only run step 2 once. To ship real logs instead of the `curl` smoke test,
+point Vector at the same endpoint — see
+[`docker/vector.toml`](docker/vector.toml) (adapted from
+[`crates/obsidianlog-ingest/examples/vector.toml`](crates/obsidianlog-ingest/examples/vector.toml)
+for this setup).
+
+### Optional: real Sia storage via `indexd`
+
+The `sia` Compose profile adds `indexd` + the PostgreSQL database it requires,
+matching indexd's own official example. It's off by default — `docker compose
+up` alone never starts it.
+
+```sh
+cp docker/.env.example docker/.env    # set POSTGRES_PASSWORD
+docker compose -f docker/docker-compose.yml --profile sia up -d
+```
+
+Before ObsidianLog can use it, `indexd` itself needs its own one-time setup —
+this is indexd's own documented flow, not an ObsidianLog step:
+
+```sh
+docker compose -f docker/docker-compose.yml run --rm indexd seed
+docker compose -f docker/docker-compose.yml run --rm -it indexd config
+```
+
+Then ObsidianLog needs an approved `AppKey` for that indexer — run the
+onboarding example from [Testing the Sia backend](#testing-the-sia-backend)
+against `http://localhost:9982`, and set the resulting `indexd` section and
+app key in `./docker/config/config.toml` (or re-run `obsidianlog init`
+interactively and choose the Sia backend).
+
 ## Architecture
 
 Each log batch passes through a deterministic pipeline before it is stored:
@@ -220,9 +292,8 @@ Grant milestones (task-by-task progress in
 - **Month 1 — Core Storage & Ingestion** (due 2026-07-25): `obsidianlog-store`
   and `obsidianlog-ingest`, integration tests + CI, finalized storage ADRs.
 - **Month 2 — Query Tooling & Developer Experience** (due 2026-08-25): CLI query
-  interface, `verify`, and the `obsidianlog init` wizard — **done**;
-  cross-platform binaries and a Docker Compose quickstart are still in
-  progress.
+  interface, `verify`, the `obsidianlog init` wizard, and the Docker Compose
+  quickstart — **done**; cross-platform binaries are still in progress.
 - **Month 3 — Launch & Ecosystem Integration** (due 2026-09-25): reusable GitHub
   Actions workflow, documentation site, live demo, Grafana/SIEM integrations, and
   public launch.

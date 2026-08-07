@@ -23,4 +23,8 @@ node_modules/
 # Local data written by the default LocalBackend during development.
 /obsidianlog-data/
 
+# Docker Compose quickstart: local secrets and generated runtime config.
+/docker/.env
+/docker/config/
+
 # Note: Cargo.lock IS committed — this crate ships a binary.
