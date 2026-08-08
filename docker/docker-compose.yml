@@ -1,38 +1,77 @@
-# Containerized quickstart: indexd + ObsidianLog ingest, side by side.
+# Containerized quickstart for ObsidianLog.
 #
-# This is the alternative onboarding path from the proposal's "onboarding
-# friction" mitigation. Point Vector's HTTP sink at http://localhost:7080/ingest.
+# Default path (no setup beyond this file): the ingest server runs against the
+# local backend — no Sia node required, matching the project's mock-first
+# invariant. See the README's "Docker Compose quickstart" section for the full
+# walkthrough (init, sending a test log, querying it back).
 #
-#   docker compose -f docker/docker-compose.yml up
+#   docker compose -f docker/docker-compose.yml up -d obsidianlog
 #
-# NOTE (scaffold): the indexd service below is a placeholder. Pin the official
-# indexd image and its required configuration/wallet setup once finalized — see
-# docs/adr for the storage decisions this depends on.
+# Optional: real Sia storage via indexd + Postgres, behind the `sia` Compose
+# profile so they don't start unless you ask for them — indexd needs its own
+# one-time manual setup (a real wallet seed, then an interactive config
+# wizard) before it will even start, and ObsidianLog needs a separate manual
+# app-key onboarding step on top of that. Neither can be scripted into
+# `docker compose up`; see the README for the full walkthrough.
+#
+#   docker compose -f docker/docker-compose.yml --profile sia up -d
 
 services:
+  # --- Optional: real Sia storage (profile "sia") -----------------------
+  postgres:
+    profiles: ["sia"]
+    image: postgres
+    restart: unless-stopped
+    shm_size: 128mb
+    environment:
+      POSTGRES_USER: indexd
+      # Required only for the "sia" profile; leaving it unset is fine for the
+      # default local-backend path (Compose warns but doesn't fail — the
+      # `:?` required-variable syntax would fail interpolation for every
+      # service, including ones outside this profile, which we don't want).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: indexd
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   indexd:
-    # TODO(impl): replace with the official indexd image + config once finalized.
-    image: ghcr.io/siafoundation/indexd:latest
+    profiles: ["sia"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    image: ghcr.io/siafoundation/indexd:master
     restart: unless-stopped
     ports:
-      - "9980:9980"
+      - "127.0.0.1:9980:9980" # admin UI — loopback only
+      - "9981:9981" # public P2P syncer
+      - "9982:9982" # public application API (ObsidianLog's SiaBackend connects here)
     volumes:
       - indexd-data:/data
 
+  # --- Core: the ingest server (always runs) -----------------------------
   obsidianlog:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    depends_on:
-      - indexd
+    restart: unless-stopped
     ports:
       - "7080:7080"
-    environment:
-      # The CLI reads its config from here; mount a real config in `./config`.
-      OBSIDIANLOG_CONFIG: /etc/obsidianlog/config.json
     volumes:
-      - ./config:/etc/obsidianlog:ro
-    command: ["ingest", "--bind", "0.0.0.0:7080"]
+      # Persistent state: generated config.toml lives in ./config on the
+      # host (bind-mounted, so it's easy to inspect/edit); the encryption
+      # key and local-backend archive data live in the named volume below —
+      # both must survive restarts, or `init` would silently regenerate a
+      # fresh key every time (see docker/Dockerfile's HOME/WORKDIR comment).
+      - ./config:/etc/obsidianlog
+      - obsidianlog-data:/var/lib/obsidianlog
 
 volumes:
+  postgres-data:
   indexd-data:
+  obsidianlog-data:

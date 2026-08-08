@@ -1,0 +1,6 @@
+.git
+target
+docker/config
+docker/.env
+.claude
+CLAUDE.md
