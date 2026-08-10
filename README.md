@@ -6,11 +6,36 @@
 
 ObsidianLog sits alongside your hot observability stack (Datadog, Grafana, ELK) as a **cold-tier destination**. Logs flow into your active tools for monitoring, then archive to Sia: encrypted before they leave your infrastructure, compressed, hash-chained for tamper-evidence, and queryable at a fraction of the cost — with the keys and contracts owned entirely by you.
 
-> **Status:** the storage pipeline, HTTP ingest server, and `obsidianlog` CLI (`init`, `serve`, `query`, `verify`) all work and are tested end to end — logs come in, get compressed, encrypted, hash-chained, and indexed, and are retrievable and chain-verifiable, **including against real Sia** (see [Testing the Sia backend](#testing-the-sia-backend)). A [Docker Compose quickstart](#docker-compose-quickstart) is available; cross-platform release binaries are still in progress — see the [roadmap](#roadmap).
+> **Status:** the storage pipeline, HTTP ingest server, and `obsidianlog` CLI (`init`, `serve`, `query`, `verify`) all work and are tested end to end — logs come in, get compressed, encrypted, hash-chained, and indexed, and are retrievable and chain-verifiable, **including against real Sia** (see [Testing the Sia backend](#testing-the-sia-backend)). A [Docker Compose quickstart](#docker-compose-quickstart) is available, and cross-platform release binaries (Linux/macOS/Windows) are published on tagged versions — see below.
 
 ## Try it
 
-Build from source (not yet published to crates.io):
+### Installing a release binary
+
+Grab the archive for your platform from the
+[Releases page](https://github.com/emmaglorypraise/ObsidianLog/releases) —
+`obsidianlog-vX.Y.Z-<target>.tar.gz` (`.zip` on Windows), where `<target>` is
+one of `aarch64-apple-darwin`, `x86_64-apple-darwin`,
+`aarch64-unknown-linux-musl`, `x86_64-unknown-linux-musl`, or
+`x86_64-pc-windows-msvc`. Each archive contains both binaries, `obsidianlog`
+(the CLI) and `obsidianlog-ingest` (the standalone ingest server) — no
+installer, no dependencies.
+
+```sh
+tar -xzf obsidianlog-vX.Y.Z-<target>.tar.gz
+chmod +x obsidianlog obsidianlog-ingest   # the executable bit isn't always preserved in the archive
+./obsidianlog init
+```
+
+These ship **without** the `sia` Cargo feature (see the
+[CLI section](#using-the-obsidianlog-cli) below) — build from source instead
+if you need that today. On macOS, Gatekeeper will flag the binary as
+unsigned the first time; right-click → Open once, or run
+`xattr -d com.apple.quarantine obsidianlog` to clear it.
+
+### Building from source
+
+Not yet published to crates.io:
 
 ```sh
 cargo build --release
@@ -298,8 +323,8 @@ Grant milestones (task-by-task progress in
 - **Month 1 — Core Storage & Ingestion** (due 2026-07-25): `obsidianlog-store`
   and `obsidianlog-ingest`, integration tests + CI, finalized storage ADRs.
 - **Month 2 — Query Tooling & Developer Experience** (due 2026-08-25): CLI query
-  interface, `verify`, the `obsidianlog init` wizard, and the Docker Compose
-  quickstart — **done**; cross-platform binaries are still in progress.
+  interface, `verify`, the `obsidianlog init` wizard, the Docker Compose
+  quickstart, and cross-platform release binaries — **done**.
 - **Month 3 — Launch & Ecosystem Integration** (due 2026-09-25): reusable GitHub
   Actions workflow, documentation site, live demo, Grafana/SIEM integrations, and
   public launch.
