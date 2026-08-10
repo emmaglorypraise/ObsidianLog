@@ -101,14 +101,21 @@ jobs:
       - name: Verify musl binaries are statically linked
         if: contains(matrix.target, 'musl')
         run: |
-          bin_path="target/${{ matrix.target }}/release/obsidianlog"
-          file "$bin_path"
-          if ldd "$bin_path" 2>&1 | grep -q 'not a dynamic executable'; then
-            echo "OK - statically linked."
-          else
-            echo "::error::$bin_path is dynamically linked; musl builds must be static \
+          for bin in obsidianlog obsidianlog-ingest; do
+            bin_path="target/${{ matrix.target }}/release/$bin"
+            file "$bin_path"
+            # `ldd` reports a static binary differently depending on whether
+            # it's a classic ET_EXEC static binary ("not a dynamic
+            # executable" — aarch64-unknown-linux-musl) or a static-PIE/
+            # ET_DYN one ("statically linked" — x86_64-unknown-linux-musl,
+            # which defaults to PIE). Both mean no dynamic libc dependency.
+            if ldd "$bin_path" 2>&1 | grep -qE 'not a dynamic executable|statically linked'; then
+              echo "OK - $bin is statically linked."
+            else
+              echo "::error::$bin_path is dynamically linked; musl builds must be static \
           (zstd's bundled C build should link in statically - check for a new dependency \
           pulling in a dynamic libc requirement)."
-            ldd "$bin_path" || true
-            exit 1
-          fi
+              ldd "$bin_path" || true
+              exit 1
+            fi
+          done
