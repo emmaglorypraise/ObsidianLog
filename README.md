@@ -72,13 +72,19 @@ config/key and reuses them; pass `--force` to rotate the key (this makes
 previously archived data undecryptable with the new key, so it asks for
 confirmation unless you're also non-interactive).
 
-**Note:** the CLI currently only supports the **local backend** — `serve`,
-`query`, and `verify` always use `LocalBackend` regardless of what `init`
-writes to the `[indexd]` config section. Wiring the CLI to Sia is Month-3
-work (see [ADR-0007](docs/adr/0007-indexer-topology.md)). To exercise the
-real Sia path today, see [Testing the Sia backend](#testing-the-sia-backend)
-below — it drives `ArchiveEngine`/`SiaBackend` directly via `cargo test`, not
-through the `obsidianlog` binary.
+**Note:** `serve`, `query`, and `verify` select their backend from
+`config.indexd` — `LocalBackend` when unset, the real Sia backend when set
+(see [ADR-0007](docs/adr/0007-indexer-topology.md)). The Sia backend needs
+the `sia` Cargo feature; the prebuilt release binaries ship without it, so
+Sia support means building it yourself:
+
+```sh
+cargo install --path crates/obsidianlog-cli --features sia
+```
+
+To exercise the real Sia path without the CLI at all, see
+[Testing the Sia backend](#testing-the-sia-backend) below — it drives
+`ArchiveEngine`/`SiaBackend` directly via `cargo test`.
 
 ### Testing the CLI end to end, locally
 
