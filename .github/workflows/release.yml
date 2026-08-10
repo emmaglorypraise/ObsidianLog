@@ -4,8 +4,18 @@ name: Release
 # "cross-platform static binary shipping" risk mitigation) so it is ready well
 # before the Month 2/3 distribution milestones.
 #
-# Triggers on a pushed semver tag (e.g. `v0.1.0`). Builds the `obsidianlog`
-# binary for each target, packages it, and attaches it to the GitHub Release.
+# Triggers on a pushed semver tag (e.g. `v0.1.0`). Builds both the
+# `obsidianlog` CLI and the standalone `obsidianlog-ingest` binary for each
+# target and attaches them to a GitHub Release (created for the tag by
+# create-gh-release-action, since upload-rust-binary-action only uploads to
+# an existing release, it doesn't create one).
+#
+# Ships WITHOUT the `sia` feature by default: the CLI's `serve`/`query`/
+# `verify` only need it when `config.indexd` is set (see
+# crates/obsidianlog-cli/src/backend.rs), and a Sia-configured install without
+# it already fails with a clear "rebuild with --features sia" error rather
+# than silently falling back to local. Users who need Sia support today
+# build it themselves — see the README's CLI section.
 
 on:
   push:
@@ -16,8 +26,47 @@ permissions:
   contents: write
 
 jobs:
+  # All TLS in this project must go through rustls (ADR/CLAUDE.md invariant):
+  # aes-gcm/sha2 are pure Rust and every HTTP client uses rustls, so nothing
+  # here should ever need OpenSSL or a native-tls backend, on any platform.
+  # This is what actually lets the musl targets below produce static
+  # binaries — an OpenSSL dependency would force dynamic linking against the
+  # host's libssl. Fails the whole release before any of the (slow)
+  # cross-compiles run if that invariant is ever broken.
+  verify-no-native-tls:
+    name: Verify no OpenSSL/native-tls in the dependency tree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: cargo tree
+        run: |
+          if cargo tree --workspace --all-features -e normal,build \
+            | grep -iE 'openssl-sys|native-tls'; then
+            echo "::error::openssl-sys/native-tls found in the dependency tree. \
+          All TLS must go through rustls — find what pulled this in and replace it."
+            exit 1
+          fi
+          echo "OK - no OpenSSL/native-tls in the dependency tree."
+
+  create-release:
+    name: Create the GitHub Release
+    needs: verify-no-native-tls
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: taiki-e/create-gh-release-action@v1
+        with:
+          # CHANGELOG.md only has an [Unreleased] section today (no tagged
+          # release has happened yet) — don't hard-fail the first release
+          # for lacking a version-specific entry.
+          changelog: CHANGELOG.md
+          allow-missing-changelog: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   upload:
     name: ${{ matrix.target }}
+    needs: create-release
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -31,19 +80,35 @@ jobs:
             os: macos-latest
           - target: aarch64-apple-darwin
             os: macos-latest
-          - target: x86_64-pc-windows-gnu
-            os: ubuntu-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
     steps:
       - uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build and upload binary
+      - name: Build and upload binaries
         uses: taiki-e/upload-rust-binary-action@v1
         with:
-          bin: obsidianlog
+          bin: obsidianlog,obsidianlog-ingest
           target: ${{ matrix.target }}
-          # Statically linked where the target allows; cross-compiles via `cross`.
+          # Required whenever `bin` lists more than one binary — the default
+          # `$bin-$target` archive name only works for a single binary.
           archive: obsidianlog-$tag-$target
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify musl binaries are statically linked
+        if: contains(matrix.target, 'musl')
+        run: |
+          bin_path="target/${{ matrix.target }}/release/obsidianlog"
+          file "$bin_path"
+          if ldd "$bin_path" 2>&1 | grep -q 'not a dynamic executable'; then
+            echo "OK - statically linked."
+          else
+            echo "::error::$bin_path is dynamically linked; musl builds must be static \
+          (zstd's bundled C build should link in statically - check for a new dependency \
+          pulling in a dynamic libc requirement)."
+            ldd "$bin_path" || true
+            exit 1
+          fi
