@@ -13,19 +13,29 @@ ObsidianLog sits alongside your hot observability stack (Datadog, Grafana, ELK) 
 ### Installing a release binary
 
 Grab the archive for your platform from the
-[Releases page](https://github.com/emmaglorypraise/ObsidianLog/releases):
-`obsidianlog-vX.Y.Z-<target>.tar.gz` (`.zip` on Windows), where `<target>` is
-one of `aarch64-apple-darwin`, `x86_64-apple-darwin`,
-`aarch64-unknown-linux-musl`, `x86_64-unknown-linux-musl`, or
-`x86_64-pc-windows-msvc`. Each archive contains both binaries: `obsidianlog`
-(the CLI) and `obsidianlog-ingest` (the standalone ingest server). No
-installer, no dependencies.
+[Releases page](https://github.com/emmaglorypraise/ObsidianLog/releases). The
+filename follows the pattern `obsidianlog-<version>-<target>.tar.gz` (`.zip`
+on Windows), where `<target>` is one of `aarch64-apple-darwin`,
+`x86_64-apple-darwin`, `aarch64-unknown-linux-musl`,
+`x86_64-unknown-linux-musl`, or `x86_64-pc-windows-msvc`. Each archive
+contains both binaries directly (no subfolder): `obsidianlog` (the CLI) and
+`obsidianlog-ingest` (the standalone ingest server). No installer, no
+dependencies.
+
+For example, extracting v0.1.0 on Apple Silicon:
 
 ```sh
-tar -xzf obsidianlog-vX.Y.Z-<target>.tar.gz
+tar -xzf obsidianlog-v0.1.0-aarch64-apple-darwin.tar.gz
 chmod +x obsidianlog obsidianlog-ingest   # the executable bit isn't always preserved in the archive
 ./obsidianlog init
 ```
+
+Swap in whichever version and target you actually downloaded, matching the
+exact filename from the Releases page or your Downloads folder.
+
+Run these from an already-open terminal. `obsidianlog` is a command-line
+tool, not a GUI app: double-clicking the binary (or the archive) in Finder
+won't give you an interactive session to type into.
 
 These ship **without** the `sia` Cargo feature (see the
 [CLI section](#using-the-obsidianlog-cli) below); build from source instead
