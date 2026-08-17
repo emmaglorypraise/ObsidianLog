@@ -186,25 +186,33 @@ impl KeyStore for FileKeyStore {
 /// Resolve a [`KeyStore`] for `account`/`file_name`: the OS keychain if
 /// reachable, otherwise a `0600` secrets file at
 /// `FileKeyStore::default_path(file_name)` (the caller should tell the user
-/// when this fallback is taken).
-fn default_key_store(account: &str, file_name: &str) -> Result<Box<dyn KeyStore>> {
+/// when this fallback is taken). Also returns whether a secret already
+/// exists there, since resolving the store already requires checking this —
+/// callers should reuse that result instead of calling `exists()` again,
+/// each such call is a separate OS keychain round trip that can prompt for
+/// authorization on its own.
+fn default_key_store(account: &str, file_name: &str) -> Result<(Box<dyn KeyStore>, bool)> {
     let keyring = KeyringStore::new(account);
     match keyring.exists() {
-        Ok(_) => Ok(Box::new(keyring)),
-        Err(_) => Ok(Box::new(FileKeyStore::new(FileKeyStore::default_path(
-            file_name,
-        )?))),
+        Ok(existed) => Ok((Box::new(keyring), existed)),
+        Err(_) => {
+            let file_store = FileKeyStore::new(FileKeyStore::default_path(file_name)?);
+            let existed = file_store.exists()?;
+            Ok((Box::new(file_store), existed))
+        }
     }
 }
 
 /// The archive's AES-256 encryption key store — used by every command.
-pub fn default_encryption_key_store() -> Result<Box<dyn KeyStore>> {
+/// Returns the store alongside whether a key already exists there.
+pub fn default_encryption_key_store() -> Result<(Box<dyn KeyStore>, bool)> {
     default_key_store(ENCRYPTION_KEY_ACCOUNT, "key.secret")
 }
 
 /// The Sia indexd application key store — only consulted when `config.indexd`
-/// is set (i.e. the Sia backend was chosen during `init`).
-pub fn default_sia_app_key_store() -> Result<Box<dyn KeyStore>> {
+/// is set (i.e. the Sia backend was chosen during `init`). Returns the store
+/// alongside whether a key already exists there.
+pub fn default_sia_app_key_store() -> Result<(Box<dyn KeyStore>, bool)> {
     default_key_store(SIA_APP_KEY_ACCOUNT, "sia-app-key.secret")
 }
 
