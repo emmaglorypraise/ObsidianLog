@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-18
+
+### Fixed
+
+- `obsidianlog init` made up to 6 redundant OS keychain calls in a single
+  run (two exact-duplicate existence checks, plus a delete that ran
+  unconditionally right before an overwrite that already made it a no-op),
+  each able to trigger its own macOS authorization prompt. A fresh install
+  now makes 3 calls (4 if the Sia backend is chosen), and `--force` key
+  rotation drops from 6 to 3. No behavior change.
+- The README's release-binary install instructions used literal
+  `vX.Y.Z-<target>` placeholder syntax that broke when copy-pasted into a
+  shell (`<`/`>` are redirection operators, not just visual placeholders).
+  Replaced with a real, tested example plus a note to swap in the actual
+  downloaded filename.
+
+### Changed
+
+- Cleaned up README prose for readability throughout: shorter sentences,
+  em dashes replaced with clearer punctuation. No content or command
+  changes.
+- Documented that macOS's `init` keychain prompt should be answered with
+  "Always Allow" to avoid repeat prompts on later `serve`/`query`/`verify`
+  runs, and that canceling it aborts the whole `init` run rather than
+  resuming.
+
+## [0.1.0] - 2026-08-17
+
 ### Added
 
 - Cargo workspace scaffold with four crates:
@@ -112,4 +140,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   1.9, `keyring` 4.1.4.
 - Recorded ADR-0007 (indexer topology: hosted-default, bring-your-own-indexer).
 
-[Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/commits/main
+[Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/emmaglorypraise/ObsidianLog/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/emmaglorypraise/ObsidianLog/releases/tag/v0.1.0

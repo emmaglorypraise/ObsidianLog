@@ -6,7 +6,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
@@ -16,9 +16,9 @@ homepage = "https://github.com/emmaglorypraise/ObsidianLog"
 
 [workspace.dependencies]
 # Internal crates (path + version so they remain publishable to crates.io).
-obsidianlog-core = { path = "crates/obsidianlog-core", version = "0.1.0" }
-obsidianlog-store = { path = "crates/obsidianlog-store", version = "0.1.0" }
-obsidianlog-ingest = { path = "crates/obsidianlog-ingest", version = "0.1.0" }
+obsidianlog-core = { path = "crates/obsidianlog-core", version = "0.1.1" }
+obsidianlog-store = { path = "crates/obsidianlog-store", version = "0.1.1" }
+obsidianlog-ingest = { path = "crates/obsidianlog-ingest", version = "0.1.1" }
 
 # Shared dependencies; crate-specific ones live in the member that owns them.
 anyhow = "1.0.102"
