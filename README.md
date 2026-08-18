@@ -102,6 +102,15 @@ obsidianlog query --service api --level error --from 24h --format human
 obsidianlog verify
 ```
 
+On macOS, `init` will prompt for your login-keychain password (this is the
+OS asking permission for `obsidianlog` to store the encryption key it just
+generated, not an ObsidianLog password). Click **Always Allow** rather than
+just Allow: it tells macOS to trust this binary going forward, so later
+`serve`/`query`/`verify` runs read the key without prompting again. Clicking
+just "Allow" means you may be asked again on a future run. Canceling the
+prompt aborts `init` entirely: it does not resume, so a retry starts the
+whole wizard over from scratch.
+
 Re-running `obsidianlog init` is idempotent: it detects an existing
 config/key and reuses them. Pass `--force` to rotate the key (this makes
 previously archived data undecryptable with the new key, so it asks for

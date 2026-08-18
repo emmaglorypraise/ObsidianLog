@@ -23,13 +23,15 @@ use crate::keystore::{self, KeyStore};
 /// Run the setup wizard: resolves the real key stores, then delegates to the
 /// testable core.
 pub fn run(args: InitArgs, config_path: Option<PathBuf>) -> Result<()> {
-    let encryption_key_store = keystore::default_encryption_key_store()?;
-    let sia_app_key_store = keystore::default_sia_app_key_store()?;
+    let (encryption_key_store, encryption_key_exists) = keystore::default_encryption_key_store()?;
+    let (sia_app_key_store, sia_app_key_exists) = keystore::default_sia_app_key_store()?;
     run_with(
         &args,
         config_path.as_deref(),
         encryption_key_store.as_ref(),
         sia_app_key_store.as_ref(),
+        encryption_key_exists,
+        sia_app_key_exists,
     )
 }
 
@@ -179,6 +181,8 @@ fn run_with(
     config_path: Option<&Path>,
     encryption_key_store: &dyn KeyStore,
     sia_app_key_store: &dyn KeyStore,
+    encryption_key_exists: bool,
+    sia_app_key_exists: bool,
 ) -> Result<()> {
     let resolved_config_path = match config_path {
         Some(p) => p.to_path_buf(),
@@ -190,9 +194,7 @@ fn run_with(
     } else {
         None
     };
-    let encryption_key_exists = encryption_key_store.exists()?;
     let indexd_configured = existing_config.as_ref().is_some_and(|c| c.indexd.is_some());
-    let sia_app_key_exists = sia_app_key_store.exists()?;
     let setup_complete = existing_config.is_some()
         && encryption_key_exists
         && (!indexd_configured || sia_app_key_exists);
@@ -268,7 +270,6 @@ fn finish_init(
     sia_app_key_store: &dyn KeyStore,
     existing: Option<&Config>,
 ) -> Result<()> {
-    encryption_key_store.delete()?; // no-op if nothing was stored yet
     let key = EncryptionKey::generate().context("generating a new encryption key")?;
     encryption_key_store
         .store(key.expose_secret())
@@ -320,11 +321,15 @@ mod tests {
         let encryption_key_store = MockKeyStore::empty();
         let sia_app_key_store = MockKeyStore::empty();
 
+        let encryption_key_exists = encryption_key_store.exists().unwrap();
+        let sia_app_key_exists = sia_app_key_store.exists().unwrap();
         run_with(
             &args(true, false),
             Some(&config_path),
             &encryption_key_store,
             &sia_app_key_store,
+            encryption_key_exists,
+            sia_app_key_exists,
         )
         .unwrap();
 
@@ -348,20 +353,28 @@ mod tests {
         let encryption_key_store = MockKeyStore::empty();
         let sia_app_key_store = MockKeyStore::empty();
 
+        let encryption_key_exists = encryption_key_store.exists().unwrap();
+        let sia_app_key_exists = sia_app_key_store.exists().unwrap();
         run_with(
             &args(true, false),
             Some(&config_path),
             &encryption_key_store,
             &sia_app_key_store,
+            encryption_key_exists,
+            sia_app_key_exists,
         )
         .unwrap();
         let first_key = encryption_key_store.load().unwrap();
 
+        let encryption_key_exists = encryption_key_store.exists().unwrap();
+        let sia_app_key_exists = sia_app_key_store.exists().unwrap();
         run_with(
             &args(true, false),
             Some(&config_path),
             &encryption_key_store,
             &sia_app_key_store,
+            encryption_key_exists,
+            sia_app_key_exists,
         )
         .unwrap();
         let second_key = encryption_key_store.load().unwrap();
@@ -379,20 +392,28 @@ mod tests {
         let encryption_key_store = MockKeyStore::empty();
         let sia_app_key_store = MockKeyStore::empty();
 
+        let encryption_key_exists = encryption_key_store.exists().unwrap();
+        let sia_app_key_exists = sia_app_key_store.exists().unwrap();
         run_with(
             &args(true, false),
             Some(&config_path),
             &encryption_key_store,
             &sia_app_key_store,
+            encryption_key_exists,
+            sia_app_key_exists,
         )
         .unwrap();
         let first_key = encryption_key_store.load().unwrap();
 
+        let encryption_key_exists = encryption_key_store.exists().unwrap();
+        let sia_app_key_exists = sia_app_key_store.exists().unwrap();
         run_with(
             &args(true, true),
             Some(&config_path),
             &encryption_key_store,
             &sia_app_key_store,
+            encryption_key_exists,
+            sia_app_key_exists,
         )
         .unwrap();
         let second_key = encryption_key_store.load().unwrap();
@@ -408,11 +429,15 @@ mod tests {
         let sia_app_key_store = MockKeyStore::empty();
 
         assert!(!config_path.exists());
+        let encryption_key_exists = encryption_key_store.exists().unwrap();
+        let sia_app_key_exists = sia_app_key_store.exists().unwrap();
         run_with(
             &args(true, false),
             Some(&config_path),
             &encryption_key_store,
             &sia_app_key_store,
+            encryption_key_exists,
+            sia_app_key_exists,
         )
         .unwrap();
         assert!(config_path.exists());
@@ -438,11 +463,15 @@ mod tests {
         encryption_key_store.store(&[0x22; 32]).unwrap();
 
         // A plain re-run (no force) must leave it untouched.
+        let encryption_key_exists = encryption_key_store.exists().unwrap();
+        let sia_app_key_exists = sia_app_key_store.exists().unwrap();
         run_with(
             &args(true, false),
             Some(&config_path),
             &encryption_key_store,
             &sia_app_key_store,
+            encryption_key_exists,
+            sia_app_key_exists,
         )
         .unwrap();
         let reloaded = Config::load(Some(&config_path)).unwrap();
@@ -468,11 +497,15 @@ mod tests {
         encryption_key_store.store(&[0x33; 32]).unwrap();
         sia_app_key_store.store(&[0x44; 32]).unwrap();
 
+        let encryption_key_exists = encryption_key_store.exists().unwrap();
+        let sia_app_key_exists = sia_app_key_store.exists().unwrap();
         run_with(
             &args(true, false),
             Some(&config_path),
             &encryption_key_store,
             &sia_app_key_store,
+            encryption_key_exists,
+            sia_app_key_exists,
         )
         .unwrap();
 
@@ -506,11 +539,15 @@ mod tests {
         // leaves indexd as configured. The missing app key surfaces as a
         // clear error later, when something actually tries to connect
         // (resolve_backend), not silently here.
+        let encryption_key_exists = encryption_key_store.exists().unwrap();
+        let sia_app_key_exists = sia_app_key_store.exists().unwrap();
         run_with(
             &args(true, false),
             Some(&config_path),
             &encryption_key_store,
             &sia_app_key_store,
+            encryption_key_exists,
+            sia_app_key_exists,
         )
         .unwrap();
         let reloaded = Config::load(Some(&config_path)).unwrap();
