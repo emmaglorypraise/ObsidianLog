@@ -216,12 +216,6 @@ pub fn default_sia_app_key_store() -> Result<(Box<dyn KeyStore>, bool)> {
     default_key_store(SIA_APP_KEY_ACCOUNT, "sia-app-key.secret")
 }
 
-/// Decode a hex string collected from the user (e.g. the `init` Sia AppKey
-/// prompt) into a secret. Same format [`KeyStore`] persists internally.
-pub(crate) fn decode_secret_hex(hex: &str) -> Result<[u8; SECRET_LEN]> {
-    from_hex(hex)
-}
-
 /// Encode `bytes` as lowercase hex.
 fn to_hex(bytes: &[u8; SECRET_LEN]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()

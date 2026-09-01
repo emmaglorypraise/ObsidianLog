@@ -29,6 +29,11 @@ use serde::{Deserialize, Serialize};
 use sia_storage::{
     AppKey, AppMetadata, Builder, DownloadOptions, Object, Sdk, UploadOptions, app_id,
 };
+
+/// Re-exported so callers (the CLI's `init` wizard, the `onboard` example)
+/// can generate a fresh recovery phrase without depending on `sia_storage`
+/// directly.
+pub use sia_storage::generate_recovery_phrase;
 use tokio::io::AsyncReadExt;
 
 use super::{decode_chunk, encode_chunk, overlaps};
@@ -53,6 +58,38 @@ pub const APP_META: AppMetadata = AppMetadata {
     logo_url: None,
     callback_url: None,
 };
+
+/// Interactively onboard a new (user, app) connection: request approval from
+/// `indexer_url`, hand the approval URL to `on_approval_url` (so the caller
+/// can display/open it), then register with `recovery_phrase` once approved.
+///
+/// Blocks until the user approves the connection (or it expires/is rejected).
+/// Returns the resulting [`AppKey`] as raw bytes, ready to persist via a
+/// `KeyStore` and feed into [`SiaConfig::app_key`] on future connections —
+/// this is the one-time onboarding step; ongoing use is [`SiaBackend::connect`].
+pub async fn onboard(
+    indexer_url: &str,
+    recovery_phrase: &str,
+    on_approval_url: impl FnOnce(&str),
+) -> Result<[u8; 32]> {
+    let requesting = Builder::new(indexer_url, APP_META)
+        .map_err(|e| Error::Backend(format!("sia builder: {e}")))?
+        .request_connection()
+        .await
+        .map_err(|e| Error::Backend(format!("sia request_connection: {e}")))?;
+
+    on_approval_url(requesting.response_url());
+
+    let sdk = requesting
+        .wait_for_approval()
+        .await
+        .map_err(|e| Error::Backend(format!("sia wait_for_approval: {e}")))?
+        .register(recovery_phrase)
+        .await
+        .map_err(|e| Error::Backend(format!("sia register: {e}")))?;
+
+    Ok(sdk.app_key().export())
+}
 
 /// Connection settings for a Sia indexer (indexd) deployment.
 #[derive(Clone)]

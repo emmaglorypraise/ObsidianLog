@@ -10,6 +10,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+#[cfg(feature = "sia")]
 use dialoguer::Password;
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Confirm, Input, Select};
@@ -19,6 +20,12 @@ use obsidianlog_store::encrypt::EncryptionKey;
 use crate::cli::InitArgs;
 use crate::config::{ChunkingConfig, Config, IndexdConfig, LocalConfig, ServeConfig};
 use crate::keystore::{self, KeyStore};
+
+/// Default indexer for the "hosted" onboarding path: the Sia Foundation's
+/// own hosted indexer (50GB free tier, no infrastructure for us to run or
+/// fund — see ADR-0007). Editable at the prompt, so entering a different URL
+/// here is how a self-hosted or third-party indexer (BYO) is chosen instead.
+const DEFAULT_SIA_INDEXER_URL: &str = "https://sia.storage";
 
 /// Run the setup wizard: resolves the real key stores, then delegates to the
 /// testable core.
@@ -100,33 +107,15 @@ impl InitAnswers {
             )
         } else {
             let url: String = Input::with_theme(&theme)
-                .with_prompt("indexd application API URL")
-                .default(
-                    base.indexd
-                        .as_ref()
-                        .map(|i| i.url.clone())
-                        .unwrap_or_default(),
+                .with_prompt(
+                    "indexd application API URL (the default is Sia Storage's hosted \
+                     indexer — enter a different URL to bring your own indexer instead)",
                 )
+                .default(sia_url_default(base))
                 .interact_text()
                 .context("reading the indexd URL")?;
 
-            let app_key_hex: String = Password::with_theme(&theme)
-                .with_prompt(
-                    "indexd AppKey (64 hex characters — from `cargo run -p obsidianlog-store \
-                     --features sia --example onboard`)",
-                )
-                .validate_with(|input: &String| -> Result<(), String> {
-                    let trimmed = input.trim();
-                    if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
-                        Ok(())
-                    } else {
-                        Err("expected exactly 64 hex characters".to_string())
-                    }
-                })
-                .interact()
-                .context("reading the indexd AppKey")?;
-            let sia_app_key =
-                keystore::decode_secret_hex(app_key_hex.trim()).context("decoding the AppKey")?;
+            let sia_app_key = onboard_sia(&theme, &url)?;
 
             (
                 base.local.clone(),
@@ -171,6 +160,65 @@ impl InitAnswers {
             },
         }
     }
+}
+
+/// The indexd URL to pre-fill the prompt with: the previously configured
+/// one on re-run, otherwise [`DEFAULT_SIA_INDEXER_URL`].
+fn sia_url_default(base: &Config) -> String {
+    base.indexd
+        .as_ref()
+        .map(|i| i.url.clone())
+        .unwrap_or_else(|| DEFAULT_SIA_INDEXER_URL.to_string())
+}
+
+/// Run the interactive Sia onboarding flow against `url`: prompt for a
+/// recovery phrase (or generate one), request approval, and register —
+/// blocking until the user approves. Returns the derived `AppKey`.
+///
+/// Without the `sia` feature, this build can't reach `indexd` at all; fails
+/// clearly instead of prompting for a phrase that will never be usable.
+#[cfg(feature = "sia")]
+fn onboard_sia(theme: &ColorfulTheme, url: &str) -> Result<[u8; 32]> {
+    let recovery_phrase: String = Password::with_theme(theme)
+        .with_prompt("Sia recovery phrase (type `seed` to generate a new one)")
+        .interact()
+        .context("reading the recovery phrase")?;
+
+    let recovery_phrase = if recovery_phrase.trim() == "seed" {
+        let generated = obsidianlog_store::backend::sia::generate_recovery_phrase();
+        println!(
+            "\nYour new recovery phrase — this is your master key, save it securely, it \
+             is never stored by obsidianlog:\n\n    {generated}\n"
+        );
+        generated
+    } else {
+        recovery_phrase
+    };
+
+    println!("\nConnecting to {url}...");
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("building the async runtime for Sia onboarding")?;
+    runtime
+        .block_on(obsidianlog_store::backend::sia::onboard(
+            url,
+            &recovery_phrase,
+            |approval_url| {
+                println!("\nOpen this URL and approve the app in your Sia account:\n");
+                println!("    {approval_url}\n");
+                println!("Waiting for approval (this blocks until you approve)...");
+            },
+        ))
+        .context("onboarding with the Sia indexer")
+}
+
+#[cfg(not(feature = "sia"))]
+fn onboard_sia(_theme: &ColorfulTheme, _url: &str) -> Result<[u8; 32]> {
+    anyhow::bail!(
+        "this build of obsidianlog was compiled without Sia support; rebuild with \
+         `cargo build --features sia` to onboard a Sia indexer"
+    )
 }
 
 /// Core wizard logic, decoupled from which [`KeyStore`]s are used, so tests
@@ -312,6 +360,26 @@ mod tests {
             non_interactive,
             force,
         }
+    }
+
+    #[test]
+    fn sia_url_defaults_to_the_hosted_indexer_when_unconfigured() {
+        assert_eq!(sia_url_default(&Config::default()), DEFAULT_SIA_INDEXER_URL);
+    }
+
+    #[test]
+    fn sia_url_default_reuses_a_previously_configured_indexer() {
+        let config = Config {
+            indexd: Some(IndexdConfig {
+                url: "https://my-own-indexer.example.com".to_string(),
+                bucket: "obsidianlog".to_string(),
+            }),
+            ..Config::default()
+        };
+        assert_eq!(
+            sia_url_default(&config),
+            "https://my-own-indexer.example.com"
+        );
     }
 
     #[test]
