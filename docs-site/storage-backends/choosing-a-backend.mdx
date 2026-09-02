@@ -1,0 +1,28 @@
+---
+title: "Choosing a Backend"
+description: "Local, hosted (Sia Storage), or bring your own indexer — how to decide."
+---
+
+`obsidianlog init` offers three effective choices. All three are available
+through the same wizard; none require touching code.
+
+| Backend | Infrastructure you run | Who pays for storage | Best for |
+| --- | --- | --- | --- |
+| [Local](/storage-backends/local-backend) | None (filesystem only) | N/A — no Sia network involved | Development, testing, offline/air-gapped use |
+| [Hosted (Sia Storage)](/storage-backends/hosted-sia-storage) | None | Your `sia.storage` account's own plan (50GB free tier) | Most users — real Sia durability, zero setup |
+| [Bring Your Own Indexer](/storage-backends/bring-your-own-indexer) | Your own `indexd` (or a partner's) | You, via your own wallet | Compliance/regulated environments wanting full control |
+
+## Recommendation
+
+Start with **Local** to evaluate ObsidianLog with zero setup. Move to
+**Hosted (Sia Storage)** when you want real, durable, off-site archival — it
+costs nothing beyond your `sia.storage` account's own plan and requires no
+infrastructure from you. Only reach for **Bring Your Own Indexer** if you
+specifically need to control the wallet and infrastructure yourself.
+
+## Switching later
+
+Re-running `obsidianlog init` and choosing a different backend writes a new
+`config.toml`; it doesn't migrate previously archived data between backends.
+Plan your backend choice with that in mind if you're archiving anything you
+intend to keep long-term.

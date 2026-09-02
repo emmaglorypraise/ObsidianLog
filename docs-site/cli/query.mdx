@@ -1,0 +1,38 @@
+---
+title: "obsidianlog query"
+description: "Query archived logs by time range, service, level, host, or keyword."
+---
+
+Retrieves archived logs matching a set of filters. Results are decrypted
+**index-first**: a lightweight metadata index (under 1% of log size) is
+scanned first, so full chunks are only fetched and decrypted when they
+actually match.
+
+## Flags
+
+| Flag | Description |
+| --- | --- |
+| `--from <TIME>` | Inclusive lower bound of the time range. RFC 3339, or relative to now (e.g. `24h`, `30m`, `7d`). |
+| `--to <TIME>` | Inclusive upper bound of the time range. Same format as `--from`. |
+| `--service <NAME>` | Filter by service name. |
+| `--level <LEVEL>` | Filter by log level (e.g. `info`, `warn`, `error`). |
+| `--host <HOST>` | Filter by originating host. |
+| `--keyword <TEXT>` | Free-text keyword to match within log lines. |
+| `--format <FORMAT>` | Output format: `human` (default, colorized terminal output), `json` (pretty-printed structured array), or `raw` (one decrypted JSON object per line, for piping to `jq`). |
+
+Plus the global [`--config <FILE>`](/cli/overview#global-flags). All filters
+compose — matching is exact per field.
+
+## Examples
+
+```sh
+# Last 24 hours of errors from the api service, human-readable.
+obsidianlog query --service api --level error --from 24h --format human
+
+# A specific window, piped to jq.
+obsidianlog query --from 2026-08-01T00:00:00Z --to 2026-08-02T00:00:00Z \
+  --format raw | jq '.msg'
+
+# Free-text search across everything archived so far.
+obsidianlog query --keyword "connection refused"
+```

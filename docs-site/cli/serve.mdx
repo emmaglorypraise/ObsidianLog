@@ -1,0 +1,45 @@
+---
+title: "obsidianlog serve"
+description: "Run the Vector-compatible HTTP ingest server."
+---
+
+Starts the HTTP ingest server using the encryption key and backend
+configuration `obsidianlog init` created. Blocks until shutdown.
+
+## Flags
+
+| Flag | Description |
+| --- | --- |
+| `--bind <ADDR>` | Address to bind the HTTP ingest endpoint to. Overrides the value in `config.toml`. |
+
+Plus the global [`--config <FILE>`](/cli/overview#global-flags).
+
+## Endpoints
+
+| Route | Method | Purpose |
+| --- | --- | --- |
+| `/ingest` | `POST` | Accepts a JSON array of log events. Write-then-ack: returns `200` only after a durable, encrypted, hash-chained write; `5xx` on failure, so an upstream shipper's retry logic just works. |
+| `/health` | `GET` | Liveness check. |
+
+`/ingest` has no request authentication — it's designed to sit behind a
+trusted network boundary (e.g. bound to `127.0.0.1`, or reached only by
+Vector on the same host/private network). See
+[Security Model](/architecture-and-security/security-model).
+
+## Example
+
+```sh
+obsidianlog serve
+obsidianlog serve --bind 0.0.0.0:7080 --config /etc/obsidianlog/config.toml
+```
+
+Send it a batch:
+
+```sh
+curl -s -X POST http://localhost:7080/ingest \
+  -H 'content-type: application/json' \
+  -d '[{"timestamp":"2026-07-06T10:00:00Z","service":"api","level":"info","msg":"hello"}]'
+```
+
+See [Sending Logs with Vector](/deployment/sending-logs-with-vector) to ship
+real logs instead of a one-off `curl`.
