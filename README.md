@@ -1,12 +1,19 @@
 # ObsidianLog
 
 [![CI](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/ci.yml/badge.svg)](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/ci.yml)
+[![Demo](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/demo.yml/badge.svg)](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/demo.yml)
 
 > Long-term, tamper-evident operational log archival on [Sia](https://sia.tech). Client-side encrypted, zstd-compressed, hash-chained, and queryable.
 
 ObsidianLog sits alongside your hot observability stack (Datadog, Grafana, ELK) as a **cold-tier destination**. Logs flow into your active tools for monitoring, then archive to Sia: encrypted before they leave your infrastructure, compressed, hash-chained for tamper-evidence, and queryable at a fraction of the cost. You own the keys and the contracts, entirely.
 
 > **Status:** the storage pipeline, HTTP ingest server, and `obsidianlog` CLI (`init`, `serve`, `query`, `verify`) all work and are tested end to end. Logs come in, get compressed, encrypted, hash-chained, and indexed, then come back out retrievable and chain-verifiable, including against real Sia (see [Testing the Sia backend](#testing-the-sia-backend)). A [Docker Compose quickstart](#docker-compose-quickstart) is available, and cross-platform release binaries (Linux/macOS/Windows) are published on tagged versions, see below.
+
+**Try it live, no install:** fork this repo and run the
+[Demo workflow](.github/workflows/demo.yml) from the Actions tab
+(`workflow_dispatch` — no secrets or Sia account needed). It runs the real
+pipeline — `init` → `serve` → ingest a log → `query` it back → `verify` the
+hash chain — against the local backend, right in GitHub's UI.
 
 ## Try it
 
