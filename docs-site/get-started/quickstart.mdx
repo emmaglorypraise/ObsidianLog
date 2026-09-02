@@ -1,0 +1,90 @@
+---
+title: "Quickstart"
+description: "Install a release binary and run your first init → serve → ingest → query → verify loop."
+---
+
+## Installing a release binary
+
+Grab the archive for your platform from the
+[Releases page](https://github.com/emmaglorypraise/ObsidianLog/releases). The
+filename follows the pattern `obsidianlog-<version>-<target>.tar.gz` (`.zip`
+on Windows), where `<target>` is one of `aarch64-apple-darwin`,
+`x86_64-apple-darwin`, `aarch64-unknown-linux-musl`,
+`x86_64-unknown-linux-musl`, or `x86_64-pc-windows-msvc`. Each archive
+contains both binaries directly (no subfolder): `obsidianlog` (the CLI) and
+`obsidianlog-ingest` (the standalone ingest server). No installer, no
+dependencies.
+
+For example, extracting on Apple Silicon:
+
+```sh
+tar -xzf obsidianlog-v0.1.1-aarch64-apple-darwin.tar.gz
+chmod +x obsidianlog obsidianlog-ingest   # the executable bit isn't always preserved in the archive
+./obsidianlog init
+```
+
+Swap in whichever version and target you actually downloaded, matching the
+exact filename from the Releases page.
+
+<Note>
+`obsidianlog` is a command-line tool, not a GUI app — run these from an
+already-open terminal. Double-clicking the binary (or the archive) in
+Finder/Explorer won't give you an interactive session to type into.
+</Note>
+
+These release binaries ship **without** the `sia` Cargo feature — see
+[Building From Source](/get-started/building-from-source) if you need the
+Sia backend today. On macOS, Gatekeeper will flag the binary as unsigned the
+first time: right-click → Open once, or run
+`xattr -d com.apple.quarantine obsidianlog` to clear it.
+
+## The init → serve → query → verify loop
+
+The CLI wraps setup, ingestion, retrieval, and integrity checking:
+
+```sh
+# One-time setup: generates the encryption key (OS keychain, or a 0600
+# secrets file if the keychain isn't available) and writes config.toml.
+obsidianlog init
+
+# Run the ingest server using that config.
+obsidianlog serve
+
+# In another terminal: send it a log batch.
+curl -s -X POST http://localhost:7080/ingest \
+  -H 'content-type: application/json' \
+  -d '[{"timestamp":"2026-07-06T10:00:00Z","service":"api","level":"info","msg":"hello"}]'
+
+# Query archived logs. Filters compose, and results are decrypted
+# index-first (only matching chunks are fetched).
+obsidianlog query --service api --level error --from 24h --format human
+
+# Walk every service's hash chain from genesis and confirm it's intact.
+# Exits non-zero on any break, so CI/cron can gate on it.
+obsidianlog verify
+```
+
+See the full [CLI reference](/cli/overview) for every command's flags.
+
+<Note>
+On macOS, `init` will prompt for your login-keychain password — this is the
+OS asking permission for `obsidianlog` to store the encryption key it just
+generated, not an ObsidianLog password. Click **Always Allow** rather than
+just Allow, so later `serve`/`query`/`verify` runs read the key without
+prompting again.
+</Note>
+
+Re-running `obsidianlog init` is idempotent: it detects an existing
+config/key and reuses them. Pass `--force` to rotate the key (this makes
+previously archived data undecryptable with the new key, so it asks for
+confirmation unless you're also non-interactive).
+
+## What's next
+
+- [Choosing a Backend](/storage-backends/choosing-a-backend) — local disk,
+  hosted Sia Storage, or bring your own indexer.
+- [Docker Compose Quickstart](/deployment/docker-compose-quickstart) — the
+  same loop, containerized.
+- **No local install at all**: fork the repo and run the
+  [GitHub Actions demo](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/demo.yml)
+  to watch the whole pipeline run in your browser.

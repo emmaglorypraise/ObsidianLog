@@ -1,0 +1,42 @@
+---
+title: "Building From Source"
+description: "Build ObsidianLog from source, including the Sia backend."
+---
+
+Not yet published to crates.io:
+
+```sh
+git clone https://github.com/emmaglorypraise/ObsidianLog
+cd ObsidianLog
+cargo build --release
+```
+
+## Running the standalone ingest server directly
+
+`obsidianlog-ingest` is a standalone binary you can run without the CLI.
+Unlike `obsidianlog serve` (which manages the key for you), the standalone
+binary never reads its encryption key from the config file — it refuses to
+start until you pass one via `OBSIDIANLOG_ENCRYPTION_KEY` (a 64-character hex
+string) or `OBSIDIANLOG_ENCRYPTION_KEY_FILE` (a path to a file containing
+that string, the convention for a mounted Docker/Kubernetes secret):
+
+```sh
+OBSIDIANLOG_ENCRYPTION_KEY=$(openssl rand -hex 32) ./target/release/obsidianlog-ingest
+```
+
+The `obsidianlog` CLI's `init`/`serve` manage this key for you instead — see
+[obsidianlog init](/cli/init) and [obsidianlog serve](/cli/serve).
+
+## Building with the Sia backend
+
+The prebuilt release binaries ship **without** the `sia` Cargo feature, since
+it depends on a pre-1.0 SDK. To build with real Sia support:
+
+```sh
+cargo install --path crates/obsidianlog-cli --features sia
+```
+
+Without this feature, `serve`/`query`/`verify` fail with a clear error the
+moment a config points at a Sia indexer, rather than silently falling back
+to the local backend. See [Storage Backends](/storage-backends/choosing-a-backend)
+for what the Sia backend actually connects to.

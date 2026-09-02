@@ -1,0 +1,57 @@
+---
+title: "Sending Logs with Vector"
+description: "Point Vector's HTTP sink at obsidianlog-ingest to ship real logs."
+---
+
+`obsidianlog-ingest` is Vector-compatible: Vector reads your logs, then its
+HTTP sink `POST`s them (as a JSON array) to the ObsidianLog ingest server.
+ObsidianLog uses write-then-ack — it returns `200` only after a durable,
+encrypted, hash-chained write, and `5xx` on failure — so Vector owns
+buffering, backpressure, and retry; a `5xx` is simply retried.
+
+## Example configuration
+
+```toml
+# --- Source: tail your application's log files (swap for your real source) ---
+[sources.app_logs]
+type = "file"
+include = ["/var/log/myapp/*.log"]
+
+# --- Optional: parse each line into structured fields ObsidianLog indexes on ---
+# ObsidianLog reads `timestamp`, `service`, `level`, `host`, `trace_id` when
+# present, and tolerates anything missing.
+[transforms.structure]
+type = "remap"
+inputs = ["app_logs"]
+source = '''
+  . = object!(parse_json(.message) ?? { "message": .message })
+  .service = .service || "myapp"
+'''
+
+# --- Sink: POST batches to the ObsidianLog ingest endpoint ---
+[sinks.obsidianlog]
+type = "http"
+inputs = ["structure"]
+uri = "http://localhost:7080/ingest"
+method = "post"
+encoding.codec = "json"        # sends each batch as a JSON array of events
+
+# Retry on ObsidianLog's 5xx (durable-write failures); Vector buffers meanwhile.
+request.retry_attempts = 10
+batch.max_bytes = 10485760     # 10 MiB
+batch.timeout_secs = 5
+```
+
+The full example lives at
+[`crates/obsidianlog-ingest/examples/vector.toml`](https://github.com/emmaglorypraise/ObsidianLog/blob/main/crates/obsidianlog-ingest/examples/vector.toml)
+(a [Docker-adapted version](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docker/vector.toml)
+exists too).
+
+## Running it
+
+```sh
+obsidianlog-ingest              # start the server (defaults to 127.0.0.1:7080)
+vector --config vector.toml     # start shipping
+```
+
+See [obsidianlog serve](/cli/serve) for the endpoints Vector's sink talks to.

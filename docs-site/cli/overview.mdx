@@ -1,0 +1,29 @@
+---
+title: "CLI Overview"
+description: "The obsidianlog binary and its four subcommands."
+---
+
+The `obsidianlog` binary wraps setup, ingestion, retrieval, and integrity
+checking into four subcommands:
+
+| Command | Purpose |
+| --- | --- |
+| [`init`](/cli/init) | Interactive setup wizard: generate keys, configure a storage backend, write `config.toml`. |
+| [`serve`](/cli/serve) | Run the Vector-compatible HTTP ingest server. |
+| [`query`](/cli/query) | Query archived logs by time range, service, level, host, or keyword. |
+| [`verify`](/cli/verify) | Traverse and validate the full hash chain for tamper-evidence. |
+
+## Global flags
+
+Every subcommand accepts:
+
+| Flag | Description |
+| --- | --- |
+| `-c, --config <FILE>` | Path to the ObsidianLog config file. Defaults to the platform config directory (`$XDG_CONFIG_HOME/obsidianlog/config.toml`, falling back to `~/.config/obsidianlog/config.toml`). |
+
+## How the backend is chosen
+
+`serve`, `query`, and `verify` all read their storage backend from the same
+`config.toml`, written by `init`: the local filesystem if `indexd` is unset,
+or the Sia backend if it's configured. See
+[Choosing a Backend](/storage-backends/choosing-a-backend).

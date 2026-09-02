@@ -1,0 +1,28 @@
+---
+title: "Decisions"
+description: "Architecture Decision Records — the significant, hard-to-reverse choices behind ObsidianLog, and why."
+---
+
+Significant or hard-to-reverse design choices are recorded as **Architecture
+Decision Records (ADRs)** in the repository — each one captures the context,
+the decision, and its consequences at the time it was made. They're kept in
+the repo itself rather than duplicated here, so this page links out rather
+than reproducing them (the source of truth doesn't drift out of sync with a
+second copy).
+
+| ADR | Decision |
+| --- | --- |
+| [0002](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0002-encryption-and-nonces.md) | Encryption and nonces |
+| [0003](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0003-per-service-chains-and-serialized-writes.md) | Per-service chains and serialized writes |
+| [0004](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0004-workspace-layout-and-storage-abstraction.md) | Workspace layout and storage abstraction |
+| [0005](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0005-storage-data-model.md) | Storage data model |
+| [0006](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0006-sia-integration.md) | Sia integration (feature-gated, pinned SDK) |
+| [0007](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0007-indexer-topology.md) | Indexer topology: hosted-default, bring-your-own-indexer |
+| [0008](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0008-sia-object-overhead.md) | Reducing Sia object overhead (coalesce manifest, fold index) |
+| [0009](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0009-service-id-nonce-discriminator.md) | Manifest-assigned service ids as the nonce discriminator |
+| [0010](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0010-sequence-in-storage-path.md) | Chunk sequence as part of the storage path |
+| [0011](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0011-ingest-binary-requires-explicit-key.md) | The standalone ingest binary requires an explicit encryption key |
+| [0012](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0012-ingest-trust-boundary.md) | `/ingest` relies on network isolation, not request authentication |
+
+The full, current list (including how new ones get added) lives in
+[`docs/adr`](https://github.com/emmaglorypraise/ObsidianLog/tree/main/docs/adr).
