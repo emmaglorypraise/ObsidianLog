@@ -1,0 +1,19 @@
+# Grafana provisioning config for the Infinity datasource
+# (https://grafana.com/grafana/plugins/yesoreyeram-infinity-datasource/),
+# pointed at whatever export-and-serve.sh is serving.
+#
+# Usage: copy this into Grafana's provisioning/datasources/ directory (or
+# mount it there if running Grafana in Docker), then start/restart Grafana.
+# The actual URL is set per-query (see dashboard.json), not here — Infinity
+# is a general-purpose datasource, so registration just makes it available.
+
+apiVersion: 1
+
+datasources:
+  - name: Infinity
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    isDefault: false
+    jsonData:
+      datasource_mode: "basic"
+      auth_method: "none"
