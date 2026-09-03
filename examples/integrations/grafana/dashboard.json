@@ -1,0 +1,53 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_INFINITY",
+      "label": "Infinity",
+      "description": "Select the Infinity datasource you registered via datasource.yaml (or the UI).",
+      "type": "datasource",
+      "pluginId": "yesoreyeram-infinity-datasource"
+    }
+  ],
+  "title": "ObsidianLog — Example Log Viewer",
+  "description": "Minimal example dashboard proving obsidianlog query --format json is queryable from Grafana via the Infinity datasource. Not a polished production dashboard — see examples/integrations/grafana/README.md.",
+  "schemaVersion": 39,
+  "editable": true,
+  "timezone": "browser",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Archived logs",
+      "type": "table",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_INFINITY}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_INFINITY}"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "http://localhost:8787/logs.json",
+          "root_selector": "",
+          "columns": [
+            { "selector": "timestamp", "text": "Timestamp", "type": "timestamp" },
+            { "selector": "service", "text": "Service", "type": "string" },
+            { "selector": "level", "text": "Level", "type": "string" },
+            { "selector": "host", "text": "Host", "type": "string" },
+            { "selector": "raw.msg", "text": "Message", "type": "string" }
+          ]
+        }
+      ]
+    }
+  ]
+}
