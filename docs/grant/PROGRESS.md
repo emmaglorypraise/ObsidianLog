@@ -93,6 +93,7 @@ ingest server.
 | Documentation site | _pending_ | |
 | Live end-to-end demo | _pending_ | |
 | Indexer topology: hosted-default + bring-your-own-indexer | _in progress_ | Decision recorded in [ADR-0007](../adr/0007-indexer-topology.md). Implementation: make the ingest server's backend selectable (Sia vs local) — **done**, brought forward to Month 2, [#44](https://github.com/emmaglorypraise/ObsidianLog/pull/44) — + operate a hosted indexer (funded wallet, per-app-key quotas, onboarding) — still pending. |
+| Fix: `obsidianlog init`'s repair path silently rotated the key without `--force` | _in progress_ | Reported by the Month 2 reviewer. [#72](https://github.com/emmaglorypraise/ObsidianLog/pull/72): deleting only `config.toml` (key still present) and re-running `init` regenerated the key unconditionally. `finish_init` now only generates a key when none exists yet or `--force` is passed. Open, not yet merged (merge freeze). |
 | Example integrations: Grafana + SIEM export workflows | _pending_ | |
 | Final MVP report (usage metrics + developer feedback) | _pending_ | |
 | Public launch | _pending_ | |
