@@ -93,6 +93,7 @@ ingest server.
 | Documentation site | _pending_ | |
 | Live end-to-end demo | _pending_ | |
 | Indexer topology: hosted-default + bring-your-own-indexer | _in progress_ | Decision recorded in [ADR-0007](../adr/0007-indexer-topology.md). Implementation: make the ingest server's backend selectable (Sia vs local) — **done**, brought forward to Month 2, [#44](https://github.com/emmaglorypraise/ObsidianLog/pull/44) — + operate a hosted indexer (funded wallet, per-app-key quotas, onboarding) — still pending. |
+| Enforce the single-writer assumption per data directory (advisory lock) | _in progress_ | Raised by the Month 2 reviewer. [#70](https://github.com/emmaglorypraise/ObsidianLog/pull/70) implements the fix and records it in [ADR-0014](../adr/0014-single-writer-advisory-lock.md): `LocalBackend::acquire_write_lock` takes an exclusive OS advisory lock (`flock`/`LockFileEx` via `fs4`) on the data directory; `obsidianlog serve` acquires it at startup and holds it for its lifetime, so a second instance fails fast instead of racing on `manifest.json`. `query`/`verify` stay lock-free. Open, not yet merged (merge freeze). |
 | Example integrations: Grafana + SIEM export workflows | _pending_ | |
 | Final MVP report (usage metrics + developer feedback) | _pending_ | |
 | Public launch | _pending_ | |
