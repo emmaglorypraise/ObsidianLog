@@ -93,6 +93,7 @@ ingest server.
 | Documentation site | _pending_ | |
 | Live end-to-end demo | _pending_ | |
 | Indexer topology: hosted-default + bring-your-own-indexer | _in progress_ | Decision recorded in [ADR-0007](../adr/0007-indexer-topology.md). Implementation: make the ingest server's backend selectable (Sia vs local) — **done**, brought forward to Month 2, [#44](https://github.com/emmaglorypraise/ObsidianLog/pull/44) — + operate a hosted indexer (funded wallet, per-app-key quotas, onboarding) — still pending. |
+| Close the ADR-0009 residual gap: refuse ingest on a lost/stale manifest with existing chunks | _in progress_ | Raised by the Month 2 reviewer. [#68](https://github.com/emmaglorypraise/ObsidianLog/pull/68) implements the fix and records it in [ADR-0013](../adr/0013-refuse-ingest-on-lost-manifest-with-existing-chunks.md): `ensure_service_ids` now checks the backend for existing chunks before registering a service as new, refusing to ingest instead of silently restarting its nonce counter at 0. Regression test: `crates/obsidianlog-store/tests/manifest_loss_nonce_reuse.rs`. Open, not yet merged (merge freeze). |
 | Example integrations: Grafana + SIEM export workflows | _pending_ | |
 | Final MVP report (usage metrics + developer feedback) | _pending_ | |
 | Public launch | _pending_ | |
