@@ -20,6 +20,8 @@ We follow the lightweight [Michael Nygard format](https://cognitect.com/blog/201
 - [0009 — Manifest-assigned service ids as the nonce discriminator](0009-service-id-nonce-discriminator.md)
 - [0010 — Chunk sequence as part of the storage path](0010-sequence-in-storage-path.md)
 - [0011 — The standalone ingest binary requires an explicit encryption key](0011-ingest-binary-requires-explicit-key.md)
+- [0012 — `/ingest` relies on network isolation, not request authentication](0012-ingest-trust-boundary.md)
+- [0014 — Advisory lock enforces the single-writer assumption per data directory](0014-single-writer-advisory-lock.md) _(0013 is reserved by an open PR — see #68)_
 
 ## Adding an ADR
 
