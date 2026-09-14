@@ -244,11 +244,31 @@ docker compose -f docker/docker-compose.yml run --rm indexd seed
 docker compose -f docker/docker-compose.yml run --rm -it indexd config
 ```
 
-Then ObsidianLog needs an approved `AppKey` for that indexer. Run the
-onboarding example from [Testing the Sia backend](#testing-the-sia-backend)
-against `http://localhost:9982`, and set the resulting `indexd` section and
-app key in `./docker/config/config.toml` (or re-run `obsidianlog init`
-interactively and choose the Sia backend).
+Then ObsidianLog needs an approved `AppKey` for that indexer: run
+`obsidianlog init` interactively, choose the "sia" backend, and enter
+`http://localhost:9982` at the indexer URL prompt in place of the
+`https://sia.storage` default (see
+[Hosted vs. bring-your-own indexer](#hosted-vs-bring-your-own-indexer)) —
+onboarding (approval + recovery-phrase registration) happens inline, no
+separate command needed. Set the resulting `indexd` section and app key in
+`./docker/config/config.toml`.
+
+## Hosted vs. bring-your-own indexer
+
+`obsidianlog init`'s Sia backend prompt defaults the indexer URL to
+[`sia.storage`](https://sia.storage), the Sia Foundation's hosted indexer —
+each user gets their own account (50GB free tier, paid tiers beyond that),
+approves ObsidianLog once, and their own plan covers their storage. **This
+costs ObsidianLog nothing to offer**: no infrastructure or wallet for us to
+operate or fund, since the indexer operator (not the app) pays for the
+storage its users consume — see
+[ADR-0007](docs/adr/0007-indexer-topology.md) for the full trust/cost model.
+
+Entering a different URL at the same prompt — your own self-hosted `indexd`,
+or any third-party indexer — selects bring-your-own (BYO) instead, useful for
+compliance-sensitive setups that want full control over the wallet and
+infrastructure in the loop. Both paths use the same onboarding mechanism
+(indexd's app-connection approval flow); only the URL differs.
 
 ## Architecture
 
