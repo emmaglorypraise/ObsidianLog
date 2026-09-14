@@ -33,6 +33,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use fs4::FileExt;
 
 use super::{decode_chunk, encode_chunk, overlaps};
 use obsidianlog_core::backend::{StorageBackend, TimeRange};
@@ -53,6 +54,13 @@ pub struct LocalBackend {
     manifest_lock: Arc<Mutex<()>>,
 }
 
+/// Guard for [`LocalBackend::acquire_write_lock`]. Releases the underlying OS
+/// advisory lock automatically when dropped.
+#[derive(Debug)]
+pub struct LocalBackendLock {
+    _file: fs::File,
+}
+
 impl LocalBackend {
     /// Create a backend storing objects under `root/bucket`.
     pub fn new(root: impl Into<PathBuf>, bucket: impl Into<String>) -> Self {
@@ -71,6 +79,38 @@ impl LocalBackend {
     /// The bucket name objects are stored under.
     pub fn bucket(&self) -> &str {
         &self.bucket
+    }
+
+    /// Acquire an exclusive, non-blocking OS advisory lock (`flock` /
+    /// `LockFileEx`) on this backend's data directory, so a second writer
+    /// pointed at the same directory — another process, or another
+    /// `LocalBackend` in this one — fails fast instead of racing this one
+    /// (ADR-0003's single-writer assumption was previously unenforced across
+    /// processes). Held for the lifetime of the returned guard; released
+    /// automatically (by the OS) when it's dropped.
+    pub fn acquire_write_lock(&self) -> Result<LocalBackendLock> {
+        let dir = self.bucket_dir();
+        fs::create_dir_all(&dir)?;
+        let path = dir.join(".lock");
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&path)?;
+        // `FileExt::try_lock(&file)`, not `file.try_lock()`: on toolchains
+        // new enough to have stabilized `std::fs::File::try_lock` (1.89+),
+        // the inherent method would silently shadow this trait method and
+        // return `std::fs::TryLockError` instead — this UFCS form pins
+        // dispatch to `fs4`'s trait regardless of toolchain version.
+        FileExt::try_lock(&file).map_err(|e| match e {
+            fs4::TryLockError::WouldBlock => Error::Backend(format!(
+                "another obsidianlog process is already writing to {} — only one writer is \
+                 supported per data directory at a time",
+                dir.display()
+            )),
+            fs4::TryLockError::Error(io_err) => Error::Io(io_err),
+        })?;
+        Ok(LocalBackendLock { _file: file })
     }
 
     fn bucket_dir(&self) -> PathBuf {
@@ -421,6 +461,41 @@ mod tests {
                 .await
                 .unwrap()
                 .is_empty()
+        );
+    }
+
+    /// Regression test for the single-writer assumption documented in
+    /// ADR-0003: nothing previously stopped two independent `LocalBackend`s
+    /// (in practice, two `obsidianlog serve` processes) pointed at the same
+    /// data directory from writing at the same time. A second instance must
+    /// now fail fast at lock acquisition instead of racing the first.
+    #[test]
+    fn a_second_backend_cannot_acquire_the_write_lock_while_the_first_holds_it() {
+        let (dir, backend) = backend();
+        let _lock = backend.acquire_write_lock().unwrap();
+
+        let second = LocalBackend::new(dir.path(), "obsidianlog");
+        assert!(
+            second.acquire_write_lock().is_err(),
+            "a second LocalBackend pointed at the same data directory must not be able to \
+             acquire the write lock while the first instance holds it"
+        );
+    }
+
+    /// The lock is per-guard, not per-directory forever: once the holder
+    /// exits (the guard drops), a new instance must be able to acquire it —
+    /// e.g. restarting `obsidianlog serve` after a clean shutdown.
+    #[test]
+    fn the_write_lock_is_released_once_its_guard_is_dropped() {
+        let (dir, backend) = backend();
+        {
+            let _lock = backend.acquire_write_lock().unwrap();
+        }
+
+        let second = LocalBackend::new(dir.path(), "obsidianlog");
+        assert!(
+            second.acquire_write_lock().is_ok(),
+            "the write lock must be released once its guard is dropped"
         );
     }
 
