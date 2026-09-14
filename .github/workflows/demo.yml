@@ -1,0 +1,87 @@
+name: Demo
+
+# A live, forkable demo of the full pipeline against the local backend: init
+# -> serve -> ingest a log -> query it back -> verify the hash chain. Zero
+# secrets, zero Sia account needed — fork this repo and click "Run workflow"
+# to watch it work. Runs the same sequence documented in the README's
+# "Testing the CLI end to end, locally" section, so the two stay in sync.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: demo-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  demo:
+    name: end-to-end demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build the CLI
+        run: cargo build -p obsidianlog-cli
+
+      - name: Set up (obsidianlog init)
+        run: |
+          mkdir -p demo
+          ./target/debug/obsidianlog init --config demo/config.toml --non-interactive
+          cat demo/config.toml
+
+      - name: Start the ingest server (obsidianlog serve)
+        run: |
+          ./target/debug/obsidianlog serve --config demo/config.toml &
+          echo "DEMO_PID=$!" >> "$GITHUB_ENV"
+          for _ in $(seq 1 20); do
+            curl -sf http://127.0.0.1:7080/health && exit 0
+            sleep 0.5
+          done
+          echo "ingest server never became healthy" >&2
+          exit 1
+
+      - name: Send a sample log
+        run: |
+          curl -sf -X POST http://127.0.0.1:7080/ingest \
+            -H 'Content-Type: application/json' \
+            -d '[{"timestamp":"2026-09-02T10:00:00Z","service":"demo","level":"info","msg":"hello from the GitHub Actions demo"}]'
+
+      - name: Stop the ingest server
+        run: kill "$DEMO_PID"
+
+      - name: Query it back (obsidianlog query)
+        run: |
+          ./target/debug/obsidianlog query --config demo/config.toml --format human \
+            | tee query-output.txt
+
+      - name: Verify the hash chain (obsidianlog verify)
+        run: |
+          ./target/debug/obsidianlog verify --config demo/config.toml \
+            | tee verify-output.txt
+
+      - name: Write job summary
+        if: always()
+        run: |
+          {
+            echo "### ObsidianLog demo result"
+            echo
+            echo "**Queried log:**"
+            echo '```'
+            cat query-output.txt 2>/dev/null || echo "(no query output captured)"
+            echo '```'
+            echo
+            echo "**Hash-chain verification:**"
+            echo '```'
+            cat verify-output.txt 2>/dev/null || echo "(no verify output captured)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
