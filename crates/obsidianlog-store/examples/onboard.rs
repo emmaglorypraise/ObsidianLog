@@ -5,6 +5,11 @@
 //! test) authenticate with via `OBSIDIANLOG_APP_KEY`. Compiled only with the
 //! `sia` feature.
 //!
+//! `obsidianlog init` now runs this same flow inline when the Sia backend is
+//! chosen — most users won't need this example anymore. It remains for
+//! headless/scripted onboarding (e.g. obtaining an `AppKey` ahead of time,
+//! outside the interactive wizard).
+//!
 //! ## Usage
 //! ```text
 //! cargo run -p obsidianlog-store --features sia --example onboard [-- <indexer-url>]
@@ -23,8 +28,7 @@
 
 use std::io::{self, BufRead, Write};
 
-use obsidianlog_store::backend::sia::APP_META;
-use sia_storage::Builder;
+use obsidianlog_store::backend::sia::{APP_META, onboard};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -48,25 +52,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "\nConnecting to indexer {indexer_url} as app \"{}\"...",
         APP_META.name
     );
-    let requesting = Builder::new(indexer_url.as_str(), APP_META)?
-        .request_connection()
-        .await?;
 
-    eprintln!("\nOpen this URL and approve the app in your Sia account:\n");
-    eprintln!("    {}\n", requesting.response_url());
-    eprintln!("Waiting for approval (this blocks until you approve)...");
-
-    let sdk = requesting
-        .wait_for_approval()
-        .await?
-        .register(&mnemonic)
-        .await?;
-    let hex: String = sdk
-        .app_key()
-        .export()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
+    let app_key = onboard(&indexer_url, &mnemonic, |approval_url| {
+        eprintln!("\nOpen this URL and approve the app in your Sia account:\n");
+        eprintln!("    {approval_url}\n");
+        eprintln!("Waiting for approval (this blocks until you approve)...");
+    })
+    .await?;
+    let hex: String = app_key.iter().map(|b| format!("{b:02x}")).collect();
 
     eprintln!("\nApproved. Your AppKey (64 hex) is below — save it securely:\n");
     println!("{hex}");
