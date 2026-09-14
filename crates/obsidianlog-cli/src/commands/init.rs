@@ -260,6 +260,7 @@ fn run_with(
         encryption_key_store,
         sia_app_key_store,
         existing_config.as_ref(),
+        encryption_key_exists,
     )
 }
 
@@ -269,11 +270,19 @@ fn finish_init(
     encryption_key_store: &dyn KeyStore,
     sia_app_key_store: &dyn KeyStore,
     existing: Option<&Config>,
+    encryption_key_exists: bool,
 ) -> Result<()> {
-    let key = EncryptionKey::generate().context("generating a new encryption key")?;
-    encryption_key_store
-        .store(key.expose_secret())
-        .context("persisting the encryption key")?;
+    // Only generate (and so overwrite) a key when there truly isn't one yet,
+    // or the caller explicitly asked to rotate. Without this, the repair path
+    // (e.g. config.toml deleted but the key still present) would silently
+    // regenerate the key with no --force involved, orphaning any already
+    // -archived data. Reviewer-flagged.
+    if !encryption_key_exists || args.force {
+        let key = EncryptionKey::generate().context("generating a new encryption key")?;
+        encryption_key_store
+            .store(key.expose_secret())
+            .context("persisting the encryption key")?;
+    }
 
     let base = existing.cloned().unwrap_or_default();
     let answers = if args.non_interactive {
@@ -441,6 +450,39 @@ mod tests {
         )
         .unwrap();
         assert!(config_path.exists());
+    }
+
+    /// Regression test: a user who deletes only `config.toml` (the key
+    /// remains in the keystore) and re-runs `init` without `--force` must
+    /// get the *same* key back, not a silently rotated one. Flagged by the
+    /// Month 2 reviewer.
+    #[test]
+    fn repair_path_reuses_an_existing_key_without_force() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.toml");
+        let encryption_key_store = MockKeyStore::seeded([0x77; 32]);
+        let sia_app_key_store = MockKeyStore::empty();
+
+        assert!(!config_path.exists());
+        let encryption_key_exists = encryption_key_store.exists().unwrap();
+        let sia_app_key_exists = sia_app_key_store.exists().unwrap();
+        run_with(
+            &args(true, false),
+            Some(&config_path),
+            &encryption_key_store,
+            &sia_app_key_store,
+            encryption_key_exists,
+            sia_app_key_exists,
+        )
+        .unwrap();
+
+        assert!(config_path.exists(), "the missing config must be repaired");
+        assert_eq!(
+            encryption_key_store.load().unwrap(),
+            [0x77; 32],
+            "the repair path must reuse the existing key when config.toml is missing but \
+             the key still exists, without --force"
+        );
     }
 
     #[test]

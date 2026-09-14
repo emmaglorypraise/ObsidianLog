@@ -31,6 +31,14 @@ pub fn run(args: ServeArgs, config_path: Option<PathBuf>) -> Result<()> {
         .context("starting the backend-resolution runtime")?
         .block_on(resolve_backend(&config))?;
 
+    // Single-writer guard (ADR-0003): for the local backend, fail fast if
+    // another obsidianlog process is already serving this data directory,
+    // rather than letting both race on manifest.json. Held for the whole
+    // server lifetime; released automatically on shutdown.
+    let _write_lock = backend
+        .acquire_write_lock()
+        .context("checking for another obsidianlog process writing to this data directory")?;
+
     let bind = args.bind.unwrap_or(config.serve.bind);
     let engine = ArchiveEngine::new(backend, key, config.bucket)
         .with_window_secs(config.chunking.window_secs);

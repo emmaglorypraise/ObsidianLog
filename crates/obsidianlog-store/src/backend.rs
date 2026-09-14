@@ -29,7 +29,7 @@ pub mod any;
 pub use any::AnyBackend;
 
 pub mod local;
-pub use local::LocalBackend;
+pub use local::{LocalBackend, LocalBackendLock};
 
 #[cfg(feature = "sia")]
 pub mod sia;

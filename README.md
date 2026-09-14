@@ -279,6 +279,13 @@ flowchart TD
 - **Keys/secrets:** generated locally, stored in the OS keychain or a `0600`
   file. Never transmitted, never committed.
 
+**Single writer per data directory.** Only one `obsidianlog serve` may write to
+a given local data directory at a time — this is what keeps each service's hash
+chain and nonce counter consistent (ADR-0003). `serve` enforces it with an OS
+advisory lock, so a second instance pointed at the same directory fails
+immediately at startup instead of racing the first (ADR-0014). `query` and
+`verify` are read-only and unaffected — they can run alongside a live `serve`.
+
 ## Repository layout
 
 This is a Cargo workspace of four crates:
