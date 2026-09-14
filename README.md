@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/ci.yml/badge.svg)](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/ci.yml)
 [![Demo](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/demo.yml/badge.svg)](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/demo.yml)
+[![Docs](https://img.shields.io/badge/docs-obsidianlog.mintlify.site-5B4FE9)](https://obsidianlog.mintlify.site/)
 
 > Long-term, tamper-evident operational log archival on [Sia](https://sia.tech). Client-side encrypted, zstd-compressed, hash-chained, and queryable.
 
