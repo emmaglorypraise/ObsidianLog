@@ -1,0 +1,40 @@
+---
+title: "Hosted (Sia Storage)"
+description: "The zero-setup default: sia.storage, operated by the Sia Foundation, not by ObsidianLog."
+---
+
+`obsidianlog init`'s Sia backend prompt defaults the indexer URL to
+[`sia.storage`](https://sia.storage), a hosted indexer operated by the Sia
+Foundation — not by ObsidianLog. Choosing it and accepting the default URL
+gets you real, durable, redundant Sia storage with no infrastructure to run.
+
+## How it works
+
+Each user gets their own `sia.storage` account (50GB free tier, paid tiers
+beyond that) and approves ObsidianLog to act on their behalf once —
+`obsidianlog init` runs this approval inline: it prompts for a recovery
+phrase (or generates a new one), shows an approval URL, and blocks until you
+approve it in your Sia account. After that, reconnecting is silent.
+
+## Who pays for storage
+
+**`sia.storage`'s operator does — not ObsidianLog.** Per its own
+documentation: *"the indexer operator forms and maintains contracts with
+storage providers and pays for the capacity apps consume."* Your account's
+own plan covers your storage. ObsidianLog operates no infrastructure and
+funds no wallet to offer this — it's simply the default indexer URL.
+
+## The security promise still holds
+
+Because encryption happens client-side under a key you hold, before data
+ever reaches the SDK, the indexer operator — `sia.storage`, or anyone else —
+is cryptographically unable to read your archived logs. "We host the
+plumbing but cannot read your archives" is the posture in every mode. See
+[Security Model](/architecture-and-security/security-model).
+
+## When to use it
+
+The default choice for most users: zero infrastructure, zero wallet funding,
+real Sia durability. If you want full control over your own wallet and
+infrastructure instead — e.g. regulated/compliance environments — see
+[Bring Your Own Indexer](/storage-backends/bring-your-own-indexer).

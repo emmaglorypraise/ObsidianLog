@@ -1,0 +1,68 @@
+---
+title: "Docker Compose Quickstart"
+description: "Run the ingest server in a container against the local backend, or wire up a self-hosted indexd."
+---
+
+`docker/docker-compose.yml` runs the ingest server in a container against
+the **local backend** by default — no Sia node, no wallet, nothing beyond
+Docker itself.
+
+## The local-backend path
+
+```sh
+# 1. Start the ingest server (builds the image on first run).
+docker compose -f docker/docker-compose.yml up -d obsidianlog
+
+# 2. One-time setup: generates the encryption key (stored inside the
+#    container's persistent volume, not your host keychain) and config.toml
+#    (written to ./docker/config, so you can inspect/edit it).
+docker compose -f docker/docker-compose.yml run --rm obsidianlog \
+  init --non-interactive --config /etc/obsidianlog/config.toml
+
+# 3. Restart so the now-configured server picks up the generated key.
+docker compose -f docker/docker-compose.yml restart obsidianlog
+
+# 4. Send a test log.
+curl -s -X POST http://localhost:7080/ingest \
+  -H 'content-type: application/json' \
+  -d '[{"timestamp":"2026-08-06T10:00:00Z","service":"api","level":"info","msg":"hello from docker"}]'
+
+# 5. Query it back.
+docker compose -f docker/docker-compose.yml run --rm obsidianlog \
+  query --config /etc/obsidianlog/config.toml --service api
+
+# 6. Verify the hash chain.
+docker compose -f docker/docker-compose.yml run --rm obsidianlog \
+  verify --config /etc/obsidianlog/config.toml
+```
+
+The encryption key and archived data live in the `obsidianlog-data` named
+volume — they survive `docker compose restart`/`down` (without `-v`), so you
+only run step 2 once. To ship real logs instead of the `curl` smoke test,
+see [Sending Logs with Vector](/deployment/sending-logs-with-vector).
+
+## Optional: self-hosted `indexd`
+
+The `sia` Compose profile adds `indexd` + the PostgreSQL database it
+requires, matching indexd's own official example. It's off by default —
+`docker compose up` alone never starts it:
+
+```sh
+cp docker/.env.example docker/.env    # set POSTGRES_PASSWORD
+docker compose -f docker/docker-compose.yml --profile sia up -d
+```
+
+`indexd` itself needs its own one-time setup first (indexd's own documented
+flow, not an ObsidianLog step):
+
+```sh
+docker compose -f docker/docker-compose.yml run --rm indexd seed
+docker compose -f docker/docker-compose.yml run --rm -it indexd config
+```
+
+Then run `obsidianlog init` interactively, choose the Sia backend, and enter
+`http://localhost:9982` at the indexer URL prompt in place of the
+`https://sia.storage` default — onboarding happens inline, no separate
+command needed. See
+[Bring Your Own Indexer](/storage-backends/bring-your-own-indexer) for when
+this is the right choice.

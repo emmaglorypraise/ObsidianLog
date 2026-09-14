@@ -1,0 +1,42 @@
+---
+title: "Introduction"
+description: "Long-term, tamper-evident operational log archival on Sia."
+---
+
+**ObsidianLog** sits alongside your hot observability stack (Datadog, Grafana, ELK) as a **cold-tier destination**. Logs flow into your active tools for monitoring, then archive to Sia: encrypted before they leave your infrastructure, compressed, hash-chained for tamper-evidence, and queryable at a fraction of the cost. You own the keys and the contracts, entirely.
+
+Client-side encrypted, zstd-compressed, hash-chained, and queryable — the storage pipeline, HTTP ingest server, and `obsidianlog` CLI (`init`, `serve`, `query`, `verify`) all work and are tested end to end.
+
+## Start here
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" href="/get-started/quickstart">
+    Install a release binary (or build from source) and run your first init → serve → query → verify loop.
+  </Card>
+  <Card title="Try it live, no install" href="https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/demo.yml">
+    Fork the repo and run the GitHub Actions demo — the full pipeline, in your browser, zero setup.
+  </Card>
+</CardGroup>
+
+## Browse by topic
+
+<CardGroup cols={2}>
+  <Card title="Using the CLI" href="/cli/overview">
+    Every `obsidianlog` command — `init`, `serve`, `query`, `verify` — with the full flag reference.
+  </Card>
+  <Card title="Storage Backends" href="/storage-backends/choosing-a-backend">
+    Local, hosted (Sia Storage), or bring your own indexer — what each means and how to choose.
+  </Card>
+  <Card title="Deployment" href="/deployment/docker-compose-quickstart">
+    Run ObsidianLog in Docker Compose, and ship real logs into it with Vector.
+  </Card>
+  <Card title="Architecture & Security" href="/architecture-and-security/pipeline-architecture">
+    How a log batch becomes a hash-chained, encrypted archive — and the security model behind it.
+  </Card>
+</CardGroup>
+
+## Project
+
+Open source, MIT-licensed, and developed in the open. See
+[Contributing](/project/contributing) to get involved, or
+[Where to Get Help](/project/where-to-get-help) if you're stuck.

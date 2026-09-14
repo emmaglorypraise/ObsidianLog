@@ -1,0 +1,36 @@
+---
+title: "Bring Your Own Indexer"
+description: "Point ObsidianLog at your own self-hosted indexd, or a third party's, for full control."
+---
+
+The Sia backend isn't limited to [`sia.storage`](/storage-backends/hosted-sia-storage)
+— at the same `obsidianlog init` prompt, entering a different indexer URL
+points ObsidianLog at your own self-hosted `indexd`, or a third party's,
+instead. This is a configuration choice, not a code fork: the indexer URL
+and app key are just config values (`SiaConfig { indexer_url, bucket,
+app_key }`).
+
+## Who this is for
+
+Compliance-sensitive teams and anyone who wants full control over the
+wallet, keys, and data path in the loop, rather than trusting an operator —
+regulated shops in particular. The same onboarding mechanism (indexd's
+app-connection approval flow) works identically against any indexer; only
+the URL differs.
+
+## Running your own `indexd`
+
+See the [Docker Compose Quickstart](/deployment/docker-compose-quickstart)
+for the `sia` Compose profile, which runs `indexd` + the PostgreSQL database
+it requires locally. Standing up a real, funded, internet-facing instance is
+a real operational commitment — a funded wallet, contract maintenance, and
+monitoring — deliberately kept separate from ObsidianLog's own scope. See
+[Decisions](/architecture-and-security/decisions) (ADR-0007) for the full
+reasoning behind this split.
+
+## The security promise still holds
+
+Regardless of which indexer you point at, encryption happens client-side
+under a key you hold, before data ever reaches the SDK — the indexer
+operator is cryptographically unable to read your archived logs either way.
+See [Security Model](/architecture-and-security/security-model).

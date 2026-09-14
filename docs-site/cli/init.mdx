@@ -1,0 +1,51 @@
+---
+title: "obsidianlog init"
+description: "Interactive setup wizard: generate keys, configure a storage backend, write config.toml."
+---
+
+Generates the archive's AES-256 encryption key, walks you through choosing a
+storage backend, and writes `config.toml`. Idempotent: re-running detects an
+existing config/key and reuses them unless you pass `--force`.
+
+## Flags
+
+| Flag | Description |
+| --- | --- |
+| `--non-interactive` | Accept every default, no prompts — always picks the local backend. Useful for scripting (CI, Docker). |
+| `--force` | Overwrite an existing configuration. Rotates the encryption key, which makes previously archived data undecryptable with the new key — asks for confirmation unless you're also non-interactive. |
+
+Plus the global [`--config <FILE>`](/cli/overview#global-flags).
+
+## What it asks (interactively)
+
+1. **Storage bucket / namespace** — default `obsidianlog`.
+2. **Storage backend** — `local` (no Sia node needed) or `sia`.
+3. If `local`: **local storage directory** — default `./obsidianlog-data`.
+   If `sia`: an **indexer URL**, defaulting to
+   [`https://sia.storage`](https://sia.storage) (the hosted, zero-setup
+   option), then a **recovery phrase** prompt (type `seed` to generate a new
+   one) to complete onboarding inline — no separate command needed. See
+   [Choosing a Backend](/storage-backends/choosing-a-backend) for what this
+   actually connects to and when to use a different URL instead.
+4. **Ingest server bind address** — default `127.0.0.1:7080`.
+5. **Chunk time window (seconds)** — default `3600`.
+
+## Where keys live
+
+The encryption key (and, if you chose Sia, the indexd app key) are stored in
+your OS keychain via the `keyring` crate — Keychain on macOS, Credential
+Manager on Windows, Secret Service on Linux — falling back to a `0600`
+secrets file (`~/.obsidianlog/`) if the keychain isn't reachable. Keys are
+never transmitted or committed anywhere.
+
+## Example
+
+```sh
+obsidianlog init
+```
+
+Non-interactive, for scripting:
+
+```sh
+obsidianlog init --non-interactive --config /etc/obsidianlog/config.toml
+```

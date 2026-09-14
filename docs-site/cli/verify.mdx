@@ -1,0 +1,39 @@
+---
+title: "obsidianlog verify"
+description: "Traverse and validate the full hash chain for tamper-evidence."
+---
+
+Walks each service's SHA-256 hash chain from genesis and confirms it's
+intact — proof that nothing archived has been modified, reordered, or
+removed since it was written. Never decrypts log content to do this.
+
+## Flags
+
+| Flag | Description |
+| --- | --- |
+| `--service <NAME>` | Restrict verification to a single service's chain. Omit to verify every service. |
+
+Plus the global [`--config <FILE>`](/cli/overview#global-flags).
+
+## Exit codes
+
+`verify` exits **non-zero on any break** in any checked chain, and zero
+otherwise — designed to be gated on directly in CI or a cron job:
+
+```sh
+obsidianlog verify || alert-on-call "hash chain broken"
+```
+
+## Example
+
+```sh
+# Verify everything.
+obsidianlog verify
+
+# Verify just one service.
+obsidianlog verify --service api
+```
+
+For a chain that fails, `verify` prints which service and where the break
+was detected (a missing chunk, a corrupted chunk, or a head mismatch),
+rather than just a pass/fail.

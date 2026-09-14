@@ -1,0 +1,43 @@
+---
+title: "Local Backend"
+description: "The default, Sia-free backend — a filesystem store for development, testing, and offline use."
+---
+
+`LocalBackend` is the default: no Sia node, no wallet, nothing beyond disk.
+`obsidianlog init` picks it unless you explicitly choose the Sia backend, and
+every default build/test in this project runs against it — the project's
+mock-first invariant.
+
+## On-disk layout
+
+Objects are stored as files under `<root>/<bucket>`, mirroring the same
+layout used on Sia so the rest of the pipeline behaves identically
+regardless of backend:
+
+```text
+<root>/<bucket>/index/<service>/<window>-<sequence>.idx     # ServiceWindowIndex (JSON)
+<root>/<bucket>/chunks/<service>/<window>-<sequence>.bin     # framed chunk (header + ciphertext)
+<root>/<bucket>/manifest.json                                 # Manifest (JSON)
+```
+
+`sequence` (unique and monotonic per service) is part of the path, not just
+`window` — a window can legitimately receive many chunks over its lifetime
+(one per batch that touches it), so `(service, window)` alone isn't a unique
+storage location.
+
+## Durability
+
+Every write is durable and atomic: data is written to a temporary file in
+the destination directory, `fsync`'d, then renamed into place, after which
+the directory is `fsync`'d to persist the rename.
+
+## When to use it
+
+- Local development and testing.
+- Offline or air-gapped environments.
+- Anywhere you don't need Sia's durability/redundancy guarantees, or want to
+  evaluate ObsidianLog before setting up a Sia backend at all.
+
+For durable, redundant, off-site storage, see
+[Hosted (Sia Storage)](/storage-backends/hosted-sia-storage) or
+[Bring Your Own Indexer](/storage-backends/bring-your-own-indexer).

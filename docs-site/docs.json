@@ -1,0 +1,61 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "ObsidianLog",
+  "colors": {
+    "primary": "#5B4FE9"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": [
+          "index",
+          "get-started/quickstart",
+          "get-started/building-from-source"
+        ]
+      },
+      {
+        "group": "Using the CLI",
+        "pages": [
+          "cli/overview",
+          "cli/init",
+          "cli/serve",
+          "cli/query",
+          "cli/verify"
+        ]
+      },
+      {
+        "group": "Storage Backends",
+        "pages": [
+          "storage-backends/local-backend",
+          "storage-backends/hosted-sia-storage",
+          "storage-backends/bring-your-own-indexer",
+          "storage-backends/choosing-a-backend"
+        ]
+      },
+      {
+        "group": "Deployment",
+        "pages": [
+          "deployment/docker-compose-quickstart",
+          "deployment/sending-logs-with-vector"
+        ]
+      },
+      {
+        "group": "Architecture & Security",
+        "pages": [
+          "architecture-and-security/pipeline-architecture",
+          "architecture-and-security/security-model",
+          "architecture-and-security/decisions"
+        ]
+      },
+      {
+        "group": "Project",
+        "pages": [
+          "project/contributing",
+          "project/where-to-get-help"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,51 @@
+---
+title: "Security Model"
+description: "Client-side encryption, user-controlled keys, and tamper-evidence — the practices ObsidianLog follows."
+---
+
+ObsidianLog handles operational logs and the encryption keys that protect
+them, so this is taken seriously. ObsidianLog is a **self-hosted,
+user-controlled** system.
+
+## Practices followed
+
+- **Client-side encryption only.** No plaintext log data ever leaves your
+  infrastructure. Encryption happens before data is written to the Sia
+  network and registered via indexd.
+- **User-controlled keys.** Key generation happens locally during
+  `obsidianlog init`. Keys are stored in your OS keychain (via the `keyring`
+  crate on Linux/macOS/Windows) or an explicit local secrets file with
+  `0600` permissions. No key escrow, no key transmission.
+- **Authenticated encryption.** AES-256-GCM provides both confidentiality
+  and ciphertext integrity — tampered ciphertext is rejected at decryption
+  time.
+- **Append-only storage model.** Chunks are write-once. The storage model
+  prevents in-place modification, relying on append-only writes combined
+  with indexd-coordinated retrieval and SHA-256 hash chaining for
+  tamper-evidence (`obsidianlog verify`) — strong tamper-evidence without
+  requiring a blockchain.
+- **No intermediary in the storage path.** ObsidianLog connects to an
+  indexd-backed Sia indexer for indexing and retrieval coordination, without
+  any centralized intermediary. There is no ObsidianLog-operated proxy,
+  gateway, or relay. The builder has zero access to user data — this holds
+  whether you use the [hosted default](/storage-backends/hosted-sia-storage)
+  or [bring your own indexer](/storage-backends/bring-your-own-indexer).
+- **Dependency audit.** The Rust dependency tree is audited with
+  `cargo audit` in CI. Critical dependencies (`zstd`, `aes-gcm`, `sha2`) are
+  maintained by the RustCrypto and zstd-rs communities with strong security
+  track records.
+
+## Out of scope
+
+The security of your own indexd deployment (if self-hosting), Sia host
+selection, and your own operational key-management practices are outside
+ObsidianLog's control.
+
+## Reporting a vulnerability
+
+Please report vulnerabilities **privately** using GitHub's
+[private vulnerability reporting](https://github.com/emmaglorypraise/ObsidianLog/security/advisories/new)
+(Security tab → "Report a vulnerability"). Do not open a public issue.
+
+Include, where possible: affected crate/version, a description, reproduction
+steps, and impact. Reports are acknowledged within 72 hours.
