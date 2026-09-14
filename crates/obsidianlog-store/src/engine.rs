@@ -386,6 +386,13 @@ impl<B: StorageBackend> ArchiveEngine<B> {
     /// batches that concurrently introduce *different* new services (an
     /// interleaving the per-service locks above don't prevent) can't be
     /// assigned the same id.
+    ///
+    /// Before registering a service as new, checks the backend for chunk
+    /// files that already exist for it and refuses if any are found (ADR-0009
+    /// Consequences): a service with existing chunks but no manifest entry
+    /// means the manifest was lost or restored stale, and assigning a fresh
+    /// `service_id`/`next_sequence = 0` here would reuse a nonce already used
+    /// under this key for that service.
     async fn ensure_service_ids(&self, services: &BTreeSet<String>) -> Result<Manifest> {
         let unlocked = self.read_manifest_or_default().await?;
         if services.iter().all(|s| unlocked.services.contains_key(s)) {
@@ -396,6 +403,18 @@ impl<B: StorageBackend> ArchiveEngine<B> {
         let mut manifest = self.read_manifest_or_default().await?;
         for service in services {
             if !manifest.services.contains_key(service) {
+                let existing_chunks = self.backend.list_chunks(service, None).await?;
+                if !existing_chunks.is_empty() {
+                    return Err(Error::Backend(format!(
+                        "refusing to treat service '{service}' as new: {} chunk(s) already \
+                         exist on the backend but it has no manifest entry — the manifest may \
+                         be lost or restored from a stale backup; assigning a fresh service_id \
+                         here would reset its nonce counter to 0 and reuse a nonce already used \
+                         under this key for this service (see ADR-0009's Consequences)",
+                        existing_chunks.len()
+                    )));
+                }
+
                 let id = manifest.next_service_id;
                 manifest.next_service_id = manifest
                     .next_service_id
