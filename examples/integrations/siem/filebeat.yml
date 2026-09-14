@@ -1,0 +1,35 @@
+# Example Filebeat config for forwarding ObsidianLog's archived logs into a
+# SIEM. `obsidianlog query --format raw` already emits NDJSON (one JSON
+# object per line, the original ingested event, unmodified) — a shape
+# Filebeat's filestream input consumes natively, with no custom parsing.
+#
+# Usage:
+#   1. Export what you want to forward:
+#        obsidianlog query --format raw --from 24h > /var/log/obsidianlog/archive.ndjson
+#      (run this on a schedule — cron, a systemd timer — for ongoing export;
+#      a one-off `query` run is a snapshot, not a live tail.)
+#   2. filebeat -e -c filebeat.yml
+#
+# Swap the placeholder Elasticsearch host below for your real SIEM/ingest
+# endpoint (Elasticsearch, Logstash, or any Beats-compatible receiver).
+
+filebeat.inputs:
+  - type: filestream
+    id: obsidianlog-archive
+    paths:
+      - /var/log/obsidianlog/archive.ndjson
+    parsers:
+      - ndjson:
+          keys_under_root: true
+          add_error_key: true
+          overwrite_keys: true
+
+# --- Output: point this at your real SIEM ingest endpoint ---
+output.elasticsearch:
+  hosts: ["https://your-elasticsearch-host:9200"]
+  # api_key: "id:api_key"   # or username/password, per your SIEM's auth
+
+# Alternative: forward to Logstash instead, which most SIEMs (Splunk via
+# HTTP Event Collector, QRadar, etc.) can sit behind:
+# output.logstash:
+#   hosts: ["your-logstash-host:5044"]

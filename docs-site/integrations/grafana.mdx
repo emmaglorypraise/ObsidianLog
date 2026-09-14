@@ -1,0 +1,58 @@
+---
+title: "Grafana"
+description: "Visualize archived logs in Grafana using the free Infinity datasource plugin — no custom plugin needed."
+---
+
+ObsidianLog has no persistent query HTTP API — querying happens via
+`obsidianlog query`, run on demand. To visualize results in Grafana, the
+example in this repo bridges the two with the free
+[Infinity datasource plugin](https://grafana.com/grafana/plugins/yesoreyeram-infinity-datasource/),
+which reads JSON from a URL.
+
+<Note>
+This is an example, not a shipped product — a dedicated Grafana datasource
+plugin is a possible future direction, not something ObsidianLog ships
+today.
+</Note>
+
+## How it works
+
+Infinity reads from a **URL**, not a local file or a command, so a small
+script exports a query to JSON and serves it over HTTP:
+
+```sh
+obsidianlog query --format json > logs.json
+python3 -m http.server 8787   # serves logs.json at :8787/logs.json
+```
+
+The full, runnable version — with argument handling and the run instructions
+— is
+[`examples/integrations/grafana/export-and-serve.sh`](https://github.com/emmaglorypraise/ObsidianLog/blob/main/examples/integrations/grafana/export-and-serve.sh)
+in the repo.
+
+## Setting it up
+
+1. Install the Infinity plugin: `grafana-cli plugins install
+   yesoreyeram-infinity-datasource`, or via Grafana's in-app plugin catalog.
+2. Register the datasource — apply
+   [`datasource.yaml`](https://github.com/emmaglorypraise/ObsidianLog/blob/main/examples/integrations/grafana/datasource.yaml)
+   via Grafana's provisioning mechanism, or add it manually through the UI.
+3. Run the export script (leave it running):
+   ```sh
+   ./export-and-serve.sh [path-to-config.toml] [port]
+   ```
+4. Import
+   [`dashboard.json`](https://github.com/emmaglorypraise/ObsidianLog/blob/main/examples/integrations/grafana/dashboard.json)
+   — Dashboards → Import — selecting your Infinity datasource when prompted.
+
+You'll see a table of archived logs: timestamp, service, level, host, and
+message (pulled from the original event's `msg`/`message` field, nested
+under `raw` in the query output — see [obsidianlog query](/cli/query) for
+the full field shape).
+
+## Keeping it fresh
+
+The export script is one-shot: it snapshots the current query results once.
+For continuous refresh, wrap it in `watch -n 60 ./export-and-serve.sh`, a
+cron job, or a systemd timer — deliberately not included, to keep this an
+example rather than infrastructure to maintain.

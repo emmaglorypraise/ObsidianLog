@@ -42,6 +42,13 @@
         ]
       },
       {
+        "group": "Integrations",
+        "pages": [
+          "integrations/grafana",
+          "integrations/siem-export"
+        ]
+      },
+      {
         "group": "Architecture & Security",
         "pages": [
           "architecture-and-security/pipeline-architecture",
