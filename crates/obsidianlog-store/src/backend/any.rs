@@ -15,9 +15,9 @@ use obsidianlog_core::error::Result;
 use obsidianlog_core::index::ServiceWindowIndex;
 use obsidianlog_core::manifest::Manifest;
 
-use super::LocalBackend;
 #[cfg(feature = "sia")]
 use super::SiaBackend;
+use super::{LocalBackend, LocalBackendLock};
 
 /// A runtime-selected backend. The `Sia` variant only exists when the `sia`
 /// feature is enabled, so a build without it can't even construct one.
@@ -37,6 +37,20 @@ impl From<LocalBackend> for AnyBackend {
 impl From<SiaBackend> for AnyBackend {
     fn from(backend: SiaBackend) -> Self {
         Self::Sia(backend)
+    }
+}
+
+impl AnyBackend {
+    /// For the `Local` variant, acquire its single-writer guard
+    /// ([`LocalBackend::acquire_write_lock`]) and return it. The `Sia`
+    /// variant has no local data directory to guard, so this is a no-op
+    /// returning `None`.
+    pub fn acquire_write_lock(&self) -> Result<Option<LocalBackendLock>> {
+        match self {
+            Self::Local(b) => Ok(Some(b.acquire_write_lock()?)),
+            #[cfg(feature = "sia")]
+            Self::Sia(_) => Ok(None),
+        }
     }
 }
 
@@ -120,5 +134,21 @@ mod tests {
             backend.get_chunk("api", "no-such-window", 0).await,
             Err(obsidianlog_core::Error::NotFound(_))
         ));
+    }
+
+    #[test]
+    fn local_variant_delegates_the_write_lock_and_a_second_instance_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let backend: AnyBackend = LocalBackend::new(dir.path(), "obsidianlog").into();
+
+        let lock = backend.acquire_write_lock().unwrap();
+        assert!(lock.is_some(), "the Local variant must return a lock");
+
+        let second: AnyBackend = LocalBackend::new(dir.path(), "obsidianlog").into();
+        assert!(
+            second.acquire_write_lock().is_err(),
+            "a second AnyBackend over the same data directory must be refused while the \
+             first's lock is held"
+        );
     }
 }

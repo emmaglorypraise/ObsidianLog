@@ -22,6 +22,7 @@ We follow the lightweight [Michael Nygard format](https://cognitect.com/blog/201
 - [0011 — The standalone ingest binary requires an explicit encryption key](0011-ingest-binary-requires-explicit-key.md)
 - [0012 — `/ingest` relies on network isolation, not request authentication](0012-ingest-trust-boundary.md)
 - [0013 — Refuse to ingest when a service has chunks but no manifest entry](0013-refuse-ingest-on-lost-manifest-with-existing-chunks.md)
+- [0014 — Advisory lock enforces the single-writer assumption per data directory](0014-single-writer-advisory-lock.md)
 
 ## Adding an ADR
 
