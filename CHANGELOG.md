@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-16
+
+### Breaking
+
+- Local credential storage changed (ADR-0015): the archive's encryption key
+  and the Sia app key are now stored together as **one** bundled OS-keychain
+  item, replacing the two independent items used through 0.1.x. A config
+  file written by an older release fails to load with a clear message
+  rather than being silently reinterpreted — there is no automatic
+  migration. **To keep reading archives created under 0.1.x, stay on
+  `obsidianlog` v0.1.1.** To move to 0.2, run `obsidianlog init --force`:
+  this generates a new encryption key, so previously archived data will no
+  longer be decryptable under it.
+
+### Fixed
+
+- A fresh `obsidianlog init` (local or Sia) produced multiple separate
+  macOS Keychain authorization prompts, one per keychain call. The new
+  bundled-credential storage, combined with a direct "create only" macOS
+  Keychain write instead of the generic check-then-write pattern, brings
+  this down to exactly one prompt for a clean fresh install (local or Sia
+  alike) and for a plain repair (config file missing, credential still
+  present). A repair that also introduces new credential material — e.g.
+  choosing Sia while an existing bundle was local-only — costs more than
+  one operation by design, prioritizing correctness (the existing
+  encryption key is always read and preserved exactly) over shaving that
+  rarer case's call count.
+- `default_key_store` (credential-store resolution) treated any error from
+  the OS keychain, including the user cancelling or denying an
+  authorization prompt, as "keychain unavailable, fall back to a plain
+  file instead." Only genuine unavailability now triggers that fallback;
+  a cancellation or denial surfaces as a real error.
+
 ## [0.1.1] - 2026-08-18
 
 ### Fixed
@@ -140,6 +173,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   1.9, `keyring` 4.1.4.
 - Recorded ADR-0007 (indexer topology: hosted-default, bring-your-own-indexer).
 
-[Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/emmaglorypraise/ObsidianLog/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/emmaglorypraise/ObsidianLog/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/emmaglorypraise/ObsidianLog/releases/tag/v0.1.0

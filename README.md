@@ -110,14 +110,17 @@ obsidianlog query --service api --level error --from 24h --format human
 obsidianlog verify
 ```
 
-On macOS, `init` will prompt for your login-keychain password (this is the
-OS asking permission for `obsidianlog` to store the encryption key it just
-generated, not an ObsidianLog password). Click **Always Allow** rather than
-just Allow: it tells macOS to trust this binary going forward, so later
-`serve`/`query`/`verify` runs read the key without prompting again. Clicking
-just "Allow" means you may be asked again on a future run. Canceling the
-prompt aborts `init` entirely: it does not resume, so a retry starts the
-whole wizard over from scratch.
+On macOS, `init` will prompt once for your login-keychain password (this is
+the OS asking permission for `obsidianlog` to store the credentials it just
+generated, not an ObsidianLog password) — the encryption key and, if you
+chose the Sia backend, the Sia app key are stored together as one
+credential, so a fresh setup means exactly one prompt (see
+[ADR-0015](docs/adr/0015-bundled-credential-single-prompt-setup.md)). Click
+**Always Allow** rather than just Allow: it tells macOS to trust this binary
+going forward, so later `serve`/`query`/`verify` runs read the credentials
+without prompting again. Clicking just "Allow" means you may be asked again
+on a future run. Canceling the prompt aborts `init` entirely: it does not
+resume, so a retry starts the whole wizard over from scratch.
 
 Re-running `obsidianlog init` is idempotent: it detects an existing
 config/key and reuses them. Pass `--force` to rotate the key (this makes
@@ -178,10 +181,10 @@ kill %1
 ```
 
 `init` writes a real entry to your OS keychain (service `obsidianlog`,
-account `encryption-key`). Clean up when you're done:
+account `credentials`). Clean up when you're done:
 
 ```sh
-security delete-generic-password -s obsidianlog -a encryption-key   # macOS
+security delete-generic-password -s obsidianlog -a credentials   # macOS
 # Linux: your Secret Service frontend (e.g. seahorse); Windows: Credential Manager
 rm -rf /tmp/obsidianlog-demo
 ```

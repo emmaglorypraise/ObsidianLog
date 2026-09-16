@@ -37,6 +37,14 @@ chrono = { version = "0.4.39", default-features = false, features = ["serde", "s
 # Driving the async ArchiveEngine::query from the sync CLI (one-shot, single-threaded).
 tokio = { version = "1.52.3", features = ["rt"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# Direct access to the macOS Keychain's create-only write (ADR-0015): the
+# `keyring` crate's own write always does its own internal existence check
+# first, so a single-call "create, or report already-exists" needs the
+# lower-level API directly. Already present transitively via `keyring`, so
+# this is a more explicit declaration, not new supply-chain surface.
+security-framework = "3.7"
+
 [dev-dependencies]
 tempfile = "3.23.0"
 

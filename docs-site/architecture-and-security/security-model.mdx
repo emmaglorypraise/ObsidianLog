@@ -13,9 +13,12 @@ user-controlled** system.
   infrastructure. Encryption happens before data is written to the Sia
   network and registered via indexd.
 - **User-controlled keys.** Key generation happens locally during
-  `obsidianlog init`. Keys are stored in your OS keychain (via the `keyring`
-  crate on Linux/macOS/Windows) or an explicit local secrets file with
-  `0600` permissions. No key escrow, no key transmission.
+  `obsidianlog init`. The encryption key and (if configured) the Sia app key
+  are stored together as one bundled credential in your OS keychain — via
+  the `keyring` crate on Linux/Windows, and a direct macOS Keychain API
+  call on macOS — or an explicit local secrets file with `0600` permissions
+  if the keychain is genuinely unreachable. No key escrow, no key
+  transmission.
 - **Authenticated encryption.** AES-256-GCM provides both confidentiality
   and ciphertext integrity — tampered ciphertext is rejected at decryption
   time.

@@ -18,12 +18,7 @@ use crate::keystore;
 /// Start the ingest server (blocks until shutdown).
 pub fn run(args: ServeArgs, config_path: Option<PathBuf>) -> Result<()> {
     let config = Config::load(config_path.as_deref())?;
-    let key = EncryptionKey::new(
-        keystore::default_encryption_key_store()?
-            .0
-            .load()
-            .context("loading the encryption key (run `obsidianlog init` first)")?,
-    );
+    let key = EncryptionKey::new(keystore::load_credential_bundle()?.encryption_key);
 
     let backend = tokio::runtime::Builder::new_current_thread()
         .enable_all()
