@@ -191,16 +191,37 @@ impl KeyStore for FileKeyStore {
 /// callers should reuse that result instead of calling `exists()` again,
 /// each such call is a separate OS keychain round trip that can prompt for
 /// authorization on its own.
+///
+/// Only falls back to the file store when the keychain itself is genuinely
+/// unreachable ([`keyring::Error::NoStorageAccess`] — e.g. no keychain
+/// service present, or permission/read-only errors at the store level).
+/// Any other error — notably the user cancelling or denying an
+/// authorization prompt — is surfaced as a real error instead of silently
+/// redirecting the secret to a file, which would otherwise change where a
+/// secret is stored based on a one-time user action rather than actual
+/// platform availability.
 fn default_key_store(account: &str, file_name: &str) -> Result<(Box<dyn KeyStore>, bool)> {
     let keyring = KeyringStore::new(account);
     match keyring.exists() {
         Ok(existed) => Ok((Box::new(keyring), existed)),
-        Err(_) => {
+        Err(e) if is_keychain_unavailable(&e) => {
             let file_store = FileKeyStore::new(FileKeyStore::default_path(file_name)?);
             let existed = file_store.exists()?;
             Ok((Box::new(file_store), existed))
         }
+        Err(e) => Err(e),
     }
+}
+
+/// Whether `err` (from a [`KeyStore::exists`] call on [`KeyringStore`])
+/// indicates the OS keychain itself is genuinely unreachable, as opposed to
+/// a user-driven cancellation/denial or any other failure that should
+/// surface rather than silently trigger the file-store fallback.
+fn is_keychain_unavailable(err: &anyhow::Error) -> bool {
+    matches!(
+        err.downcast_ref::<keyring::Error>(),
+        Some(keyring::Error::NoStorageAccess(_))
+    )
 }
 
 /// The archive's AES-256 encryption key store — used by every command.
@@ -302,6 +323,37 @@ impl KeyStore for MockKeyStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn platform_error() -> Box<dyn std::error::Error + Send + Sync> {
+        Box::new(std::io::Error::other("test platform error"))
+    }
+
+    #[test]
+    fn no_storage_access_is_treated_as_keychain_unavailable() {
+        let err = anyhow::Error::new(keyring::Error::NoStorageAccess(platform_error()));
+        assert!(is_keychain_unavailable(&err));
+    }
+
+    #[test]
+    fn platform_failure_is_not_treated_as_keychain_unavailable() {
+        // Covers cancellation/denial, which the keyring crate also surfaces
+        // as `PlatformFailure` — this must NOT silently fall back to the
+        // file store, it must surface as a real error.
+        let err = anyhow::Error::new(keyring::Error::PlatformFailure(platform_error()));
+        assert!(!is_keychain_unavailable(&err));
+    }
+
+    #[test]
+    fn no_entry_is_not_treated_as_keychain_unavailable() {
+        let err = anyhow::Error::new(keyring::Error::NoEntry);
+        assert!(!is_keychain_unavailable(&err));
+    }
+
+    #[test]
+    fn an_unrelated_error_is_not_treated_as_keychain_unavailable() {
+        let err = anyhow::anyhow!("some unrelated error");
+        assert!(!is_keychain_unavailable(&err));
+    }
 
     #[test]
     fn hex_round_trips_every_byte_value() {
