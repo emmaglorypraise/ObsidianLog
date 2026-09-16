@@ -353,6 +353,21 @@ fn run_with(args: &InitArgs, config_path: Option<&Path>, store: &dyn BundleStore
     finish_init(args, &resolved_config_path, existing_config.as_ref(), store)
 }
 
+/// The status line to print when a create-only attempt reports
+/// `AlreadyExists` (a repair, not a fresh install): explains why the wizard
+/// just re-collected every answer — the config file was missing, not the
+/// credential bundle — without implying the encryption key rotated.
+/// `sia_key_freshly_saved` is true only when a new Sia app key was just
+/// merged into the bundle, which is the one case where something in the
+/// bundle actually did change.
+fn repair_status_message(sia_key_freshly_saved: bool) -> &'static str {
+    if sia_key_freshly_saved {
+        "Existing encryption key preserved; Sia app key saved."
+    } else {
+        "Existing credentials preserved; rebuilding configuration."
+    }
+}
+
 fn finish_init(
     args: &InitArgs,
     config_path: &Path,
@@ -417,9 +432,16 @@ fn finish_init(
                 store
                     .write(&merged)
                     .context("persisting the credential bundle")?;
+                println!("{}", repair_status_message(true));
+            } else {
+                // Pure-reuse repair — nothing new to add, leave the
+                // existing bundle untouched. The wizard still re-asked
+                // every question (the config file was missing, so there
+                // was nowhere else to read the old answers from) — this
+                // line is what tells the user the key itself wasn't
+                // touched, so that doesn't read as a silent rotation.
+                println!("{}", repair_status_message(false));
             }
-            // Else: pure-reuse repair — nothing new to add, leave the
-            // existing bundle untouched.
         }
     }
 
@@ -775,6 +797,22 @@ mod tests {
             err.to_string()
                 .contains("doesn't look like a valid Sia recovery phrase"),
             "{err}"
+        );
+    }
+
+    /// A create-only `AlreadyExists` result means the wizard just re-asked
+    /// every question without the encryption key actually rotating — this
+    /// message is what tells the user that, so "why did it ask me
+    /// everything again?" doesn't read as "did it just reset my key?"
+    #[test]
+    fn repair_status_message_reflects_whether_a_sia_key_was_freshly_saved() {
+        assert_eq!(
+            repair_status_message(false),
+            "Existing credentials preserved; rebuilding configuration."
+        );
+        assert_eq!(
+            repair_status_message(true),
+            "Existing encryption key preserved; Sia app key saved."
         );
     }
 

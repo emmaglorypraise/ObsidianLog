@@ -53,6 +53,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failing with a generic parse error. The phrase is now validated locally
   first, and `seed` is matched case-insensitively.
 
+### Changed
+
+- A repair that finds `config.toml` missing but the credential bundle
+  still present (e.g. after accidentally deleting just the config file)
+  re-collects every wizard answer — there's no config left to read the old
+  ones from — which read as "did this just reset my key?" `obsidianlog
+  init` now prints a status line making the outcome explicit: "Existing
+  credentials preserved; rebuilding configuration." for a plain reuse, or
+  "Existing encryption key preserved; Sia app key saved." when the repair
+  also adds a Sia app key.
+
 ## [0.1.1] - 2026-08-18
 
 ### Fixed
