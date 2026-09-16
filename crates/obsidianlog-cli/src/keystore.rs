@@ -361,10 +361,15 @@ impl BundleStore for DefaultBundleStore {
 }
 
 /// An in-memory [`BundleStore`] for tests, so they never touch the real OS
-/// keychain or filesystem.
+/// keychain or filesystem. Also counts calls to each method, so tests can
+/// assert exactly how many keychain round-trips a code path costs — not
+/// just that the end state is correct.
 #[cfg(test)]
 pub struct MockBundleStore {
     bundle: std::sync::Mutex<Option<CredentialBundle>>,
+    read_calls: std::sync::atomic::AtomicUsize,
+    write_calls: std::sync::atomic::AtomicUsize,
+    create_calls: std::sync::atomic::AtomicUsize,
 }
 
 #[cfg(test)]
@@ -372,13 +377,31 @@ impl MockBundleStore {
     pub fn empty() -> Self {
         Self {
             bundle: std::sync::Mutex::new(None),
+            read_calls: std::sync::atomic::AtomicUsize::new(0),
+            write_calls: std::sync::atomic::AtomicUsize::new(0),
+            create_calls: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 
     pub fn seeded(bundle: CredentialBundle) -> Self {
         Self {
             bundle: std::sync::Mutex::new(Some(bundle)),
+            read_calls: std::sync::atomic::AtomicUsize::new(0),
+            write_calls: std::sync::atomic::AtomicUsize::new(0),
+            create_calls: std::sync::atomic::AtomicUsize::new(0),
         }
+    }
+
+    pub fn read_calls(&self) -> usize {
+        self.read_calls.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub fn write_calls(&self) -> usize {
+        self.write_calls.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub fn create_calls(&self) -> usize {
+        self.create_calls.load(std::sync::atomic::Ordering::SeqCst)
     }
 }
 
@@ -392,15 +415,21 @@ impl Default for MockBundleStore {
 #[cfg(test)]
 impl BundleStore for MockBundleStore {
     fn read(&self) -> Result<Option<CredentialBundle>> {
+        self.read_calls
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Ok(self.bundle.lock().unwrap().clone())
     }
 
     fn write(&self, bundle: &CredentialBundle) -> Result<()> {
+        self.write_calls
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         *self.bundle.lock().unwrap() = Some(bundle.clone());
         Ok(())
     }
 
     fn create(&self, bundle: &CredentialBundle) -> Result<BundleCreateOutcome> {
+        self.create_calls
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut guard = self.bundle.lock().unwrap();
         if guard.is_some() {
             return Ok(BundleCreateOutcome::AlreadyExists);

@@ -39,6 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   authorization prompt, as "keychain unavailable, fall back to a plain
   file instead." Only genuine unavailability now triggers that fallback;
   a cancellation or denial surfaces as a real error.
+- `obsidianlog init --force` read the credential bundle twice: once in a
+  preflight "is setup already complete?" check whose result was then
+  discarded, and again inside the rotation itself to preserve any existing
+  Sia key. The preflight read is now skipped when `--force` is already
+  explicit, cutting a forced rotation from three keychain operations down
+  to two (or to a single write when a new Sia key is chosen in the same
+  run).
 
 ## [0.1.1] - 2026-08-18
 

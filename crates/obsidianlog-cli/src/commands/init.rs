@@ -267,19 +267,30 @@ fn run_with(args: &InitArgs, config_path: Option<&Path>, store: &dyn BundleStore
     };
 
     if let Some(config) = &existing_config {
-        let indexd_configured = config.indexd.is_some();
-        // The one retained integrity check (ADR-0015): confirms the bundle
-        // actually still exists before declaring "already initialized",
-        // catching a credential manually deleted from the keychain after
-        // setup. Not claimed to add zero keychain calls on a re-run — only
-        // zero calls beyond what this correctness check already requires.
-        let existing_bundle = store.read()?;
-        let setup_complete = existing_bundle
-            .as_ref()
-            .is_some_and(|b| !indexd_configured || b.sia_app_key.is_some());
+        if args.force {
+            // --force is already explicit opt-in: skip the "is setup
+            // complete?" preflight read entirely (it only exists to pick a
+            // reuse/rotate prompt below, both of which --force bypasses)
+            // and warn once. `finish_init` does the one read this rotation
+            // actually needs, to preserve any existing Sia key.
+            eprintln!(
+                "warning: rotating the encryption key — previously archived data will no \
+                 longer be decryptable with the new key"
+            );
+        } else {
+            let indexd_configured = config.indexd.is_some();
+            // The one retained integrity check (ADR-0015): confirms the
+            // bundle actually still exists before declaring "already
+            // initialized", catching a credential manually deleted from the
+            // keychain after setup. Not claimed to add zero keychain calls
+            // on a re-run — only zero calls beyond what this correctness
+            // check already requires.
+            let existing_bundle = store.read()?;
+            let setup_complete = existing_bundle
+                .as_ref()
+                .is_some_and(|b| !indexd_configured || b.sia_app_key.is_some());
 
-        if setup_complete {
-            if !args.force {
+            if setup_complete {
                 let reuse = if args.non_interactive {
                     true
                 } else {
@@ -302,32 +313,23 @@ fn run_with(args: &InitArgs, config_path: Option<&Path>, store: &dyn BundleStore
                     println!("Nothing to do.");
                     return Ok(());
                 }
-            }
 
-            // About to rotate: confirm interactively, since old archives
-            // become undecryptable with a new encryption key. --force is
-            // the explicit opt-in for scripted use, so it skips the prompt
-            // (but still warns). Rotating never disturbs a stored Sia key
-            // unless the interactive prompt below is re-run and Sia is
-            // chosen again with a new value (see `finish_init`).
-            if args.force {
-                eprintln!(
-                    "warning: rotating the encryption key — previously archived data will no \
-                     longer be decryptable with the new key"
-                );
-            } else if !args.non_interactive {
-                let proceed = Confirm::new()
-                    .with_prompt(
-                        "Rotating the key means previously archived data can no longer be \
-                         decrypted with the new key. Continue?",
-                    )
-                    .default(false)
-                    .interact()
-                    .context("reading the rotation confirmation")?;
-                anyhow::ensure!(proceed, "aborted: key rotation was not confirmed");
+                // About to rotate: confirm interactively, since old archives
+                // become undecryptable with a new encryption key.
+                if !args.non_interactive {
+                    let proceed = Confirm::new()
+                        .with_prompt(
+                            "Rotating the key means previously archived data can no longer be \
+                             decrypted with the new key. Continue?",
+                        )
+                        .default(false)
+                        .interact()
+                        .context("reading the rotation confirmation")?;
+                    anyhow::ensure!(proceed, "aborted: key rotation was not confirmed");
+                }
+            } else {
+                eprintln!("warning: existing setup is incomplete — completing it fresh");
             }
-        } else {
-            eprintln!("warning: existing setup is incomplete — completing it fresh");
         }
     }
 
@@ -698,6 +700,33 @@ mod tests {
             store.read().unwrap().is_none(),
             "must not touch the keychain when refusing a legacy config"
         );
+    }
+
+    /// `--force` must read the bundle exactly once (to preserve any existing
+    /// Sia key before overwriting) — not once as a preflight "is setup
+    /// complete?" check and again inside the rotation itself. Caught during
+    /// real macOS verification of ADR-0015: the preflight read is discarded
+    /// and only affects which warning gets printed, so it's a wasted
+    /// keychain round-trip whenever `--force` is already explicit.
+    #[test]
+    fn force_rotation_does_not_perform_a_redundant_preflight_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.toml");
+        Config::default().save(Some(&config_path)).unwrap();
+        let store = MockBundleStore::seeded(CredentialBundle {
+            encryption_key: [0x55; 32],
+            sia_app_key: None,
+        });
+
+        run_with(&args(true, true), Some(&config_path), &store).unwrap();
+
+        assert_eq!(
+            store.read_calls(),
+            1,
+            "--force must read the bundle exactly once, not as a discarded preflight check \
+             plus a second read inside the rotation"
+        );
+        assert_eq!(store.write_calls(), 1);
     }
 
     #[test]
