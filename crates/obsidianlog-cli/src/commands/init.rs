@@ -166,6 +166,32 @@ fn sia_url_default(base: &Config) -> String {
         .unwrap_or_else(|| DEFAULT_SIA_INDEXER_URL.to_string())
 }
 
+/// Resolves what recovery phrase to actually use: `seed` (in any casing,
+/// with surrounding whitespace ignored) generates and returns a fresh one;
+/// anything else is validated locally — no network call — before it's ever
+/// handed to `onboard`. `onboard` only parses the phrase *after* the
+/// browser approval step completes, so without this check, a typo would
+/// silently burn a full approval round-trip (and one of a possibly-limited
+/// number of app-connection slots on the indexer) on an attempt that was
+/// always going to fail.
+#[cfg(feature = "sia")]
+fn resolve_recovery_phrase(input: &str) -> Result<String> {
+    if input.trim().eq_ignore_ascii_case("seed") {
+        let generated = obsidianlog_store::backend::sia::generate_recovery_phrase();
+        println!(
+            "\nYour new recovery phrase — this is your master key, save it securely, it \
+             is never stored by obsidianlog:\n\n    {generated}\n"
+        );
+        Ok(generated)
+    } else {
+        obsidianlog_store::backend::sia::validate_recovery_phrase(input).context(
+            "that doesn't look like a valid Sia recovery phrase — type `seed` to generate a \
+             new one instead",
+        )?;
+        Ok(input.to_string())
+    }
+}
+
 /// Run the interactive Sia onboarding flow against `url`: prompt for a
 /// recovery phrase (or generate one), request approval, and register —
 /// blocking until the user approves. Returns the derived `AppKey`.
@@ -179,16 +205,7 @@ fn onboard_sia(theme: &ColorfulTheme, url: &str) -> Result<[u8; 32]> {
         .interact()
         .context("reading the recovery phrase")?;
 
-    let recovery_phrase = if recovery_phrase.trim() == "seed" {
-        let generated = obsidianlog_store::backend::sia::generate_recovery_phrase();
-        println!(
-            "\nYour new recovery phrase — this is your master key, save it securely, it \
-             is never stored by obsidianlog:\n\n    {generated}\n"
-        );
-        generated
-    } else {
-        recovery_phrase
-    };
+    let recovery_phrase = resolve_recovery_phrase(&recovery_phrase)?;
 
     println!("\nConnecting to {url}...");
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -727,6 +744,38 @@ mod tests {
              plus a second read inside the rotation"
         );
         assert_eq!(store.write_calls(), 1);
+    }
+
+    /// `seed` (any casing) must still trigger phrase generation — a bare
+    /// case mismatch shouldn't fall through to "treat this as a literal
+    /// phrase" and fail with a confusing mnemonic-parse error.
+    #[cfg(feature = "sia")]
+    #[test]
+    fn resolve_recovery_phrase_treats_seed_case_insensitively() {
+        for input in ["seed", "SEED", "Seed", " seed "] {
+            let resolved = resolve_recovery_phrase(input).unwrap();
+            assert_ne!(
+                resolved, input,
+                "{input:?} must generate a fresh phrase, not be treated as a literal one"
+            );
+            // A generated phrase is a real multi-word BIP-39 mnemonic.
+            assert!(resolved.split_whitespace().count() > 1);
+        }
+    }
+
+    /// A malformed phrase must be rejected locally — before any network
+    /// call — so a typo never burns a browser approval round-trip or an
+    /// account's limited app-connection slot on a guaranteed-to-fail
+    /// registration attempt.
+    #[cfg(feature = "sia")]
+    #[test]
+    fn resolve_recovery_phrase_rejects_an_invalid_phrase() {
+        let err = resolve_recovery_phrase("not a real recovery phrase").unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("doesn't look like a valid Sia recovery phrase"),
+            "{err}"
+        );
     }
 
     #[test]

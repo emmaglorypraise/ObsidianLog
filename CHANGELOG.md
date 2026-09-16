@@ -46,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   explicit, cutting a forced rotation from three keychain operations down
   to two (or to a single write when a new Sia key is chosen in the same
   run).
+- Onboarding to Sia only validated the recovery phrase *after* the browser
+  approval step completed, so a mistyped phrase (including `SEED` in the
+  wrong case) burned a full approval round-trip — and one of a
+  possibly-limited number of app-connection slots on the indexer — before
+  failing with a generic parse error. The phrase is now validated locally
+  first, and `seed` is matched case-insensitively.
 
 ## [0.1.1] - 2026-08-18
 

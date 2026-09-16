@@ -34,6 +34,11 @@ use sia_storage::{
 /// can generate a fresh recovery phrase without depending on `sia_storage`
 /// directly.
 pub use sia_storage::generate_recovery_phrase;
+/// Re-exported so a caller can validate a recovery phrase locally — no
+/// network round-trip — before starting the `onboard` approval flow, which
+/// only parses the phrase (and so only fails on a bad one) after the
+/// approval step already completed.
+pub use sia_storage::validate_recovery_phrase;
 use tokio::io::AsyncReadExt;
 
 use super::{decode_chunk, encode_chunk, overlaps};
