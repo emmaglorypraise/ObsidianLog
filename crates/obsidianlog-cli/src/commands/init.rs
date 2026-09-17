@@ -338,18 +338,21 @@ fn run_with(args: &InitArgs, config_path: Option<&Path>, store: &dyn BundleStore
                     return Ok(());
                 }
 
-                // About to rotate: confirm interactively, since old archives
-                // become undecryptable with a new encryption key.
+                // Confirm interactively before reconfiguring. This does
+                // NOT rotate the encryption key — only `--force` does that
+                // — it just re-collects settings and, if a new Sia app key
+                // is chosen, adds it to the existing bundle.
                 if !args.non_interactive {
                     let proceed = Confirm::new()
                         .with_prompt(
-                            "Rotating the key means previously archived data can no longer be \
-                             decrypted with the new key. Continue?",
+                            "This will reconfigure the existing setup. The encryption key \
+                             stays the same; only newly chosen settings are applied. \
+                             Continue?",
                         )
                         .default(false)
                         .interact()
-                        .context("reading the rotation confirmation")?;
-                    anyhow::ensure!(proceed, "aborted: key rotation was not confirmed");
+                        .context("reading the reconfiguration confirmation")?;
+                    anyhow::ensure!(proceed, "aborted: reconfiguration was not confirmed");
                 }
             } else {
                 eprintln!("warning: existing setup is incomplete — completing it fresh");
