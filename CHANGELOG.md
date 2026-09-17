@@ -52,6 +52,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   possibly-limited number of app-connection slots on the indexer — before
   failing with a generic parse error. The phrase is now validated locally
   first, and `seed` is matched case-insensitively.
+- A re-run of `obsidianlog init` against an existing but incomplete setup
+  (or one where `Reuse it?` is declined) re-probed the keychain with a
+  `create()` attempt and a second `read()`, even though the bundle's
+  contents were already read once for the integrity/reuse check moments
+  earlier. That known bundle is now reused directly instead of being
+  discarded and re-fetched, cutting this case from up to four keychain
+  operations down to at most two.
 
 ### Changed
 

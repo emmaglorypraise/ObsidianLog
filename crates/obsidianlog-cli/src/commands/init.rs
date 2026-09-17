@@ -283,6 +283,13 @@ fn run_with(args: &InitArgs, config_path: Option<&Path>, store: &dyn BundleStore
         }
     };
 
+    // Set only by the non-force branch below, when it already reads the
+    // bundle for the integrity/reuse check. Threaded into `finish_init` so
+    // a declined-reuse or incomplete-setup re-run never re-probes with
+    // create()/read() for something this run already confirmed — see
+    // `merge_known_bundle`.
+    let mut known_bundle: Option<CredentialBundle> = None;
+
     if let Some(config) = &existing_config {
         if args.force {
             // --force is already explicit opt-in: skip the "is setup
@@ -331,32 +338,44 @@ fn run_with(args: &InitArgs, config_path: Option<&Path>, store: &dyn BundleStore
                     return Ok(());
                 }
 
-                // About to rotate: confirm interactively, since old archives
-                // become undecryptable with a new encryption key.
+                // Confirm interactively before reconfiguring. This does
+                // NOT rotate the encryption key — only `--force` does that
+                // — it just re-collects settings and, if a new Sia app key
+                // is chosen, adds it to the existing bundle.
                 if !args.non_interactive {
                     let proceed = Confirm::new()
                         .with_prompt(
-                            "Rotating the key means previously archived data can no longer be \
-                             decrypted with the new key. Continue?",
+                            "This will reconfigure the existing setup. The encryption key \
+                             stays the same; only newly chosen settings are applied. \
+                             Continue?",
                         )
                         .default(false)
                         .interact()
-                        .context("reading the rotation confirmation")?;
-                    anyhow::ensure!(proceed, "aborted: key rotation was not confirmed");
+                        .context("reading the reconfiguration confirmation")?;
+                    anyhow::ensure!(proceed, "aborted: reconfiguration was not confirmed");
                 }
             } else {
                 eprintln!("warning: existing setup is incomplete — completing it fresh");
             }
+
+            known_bundle = existing_bundle;
         }
     }
 
-    finish_init(args, &resolved_config_path, existing_config.as_ref(), store)
+    finish_init(
+        args,
+        &resolved_config_path,
+        existing_config.as_ref(),
+        known_bundle,
+        store,
+    )
 }
 
-/// The status line to print when a create-only attempt reports
-/// `AlreadyExists` (a repair, not a fresh install): explains why the wizard
-/// just re-collected every answer — the config file was missing, not the
-/// credential bundle — without implying the encryption key rotated.
+/// The status line to print for a repair (not a fresh install) — whether
+/// that's discovered via a create-only attempt reporting `AlreadyExists`,
+/// or already known going in (see [`merge_known_bundle`]): explains why the
+/// wizard just re-collected every answer — the config file was missing, or
+/// the setup was incomplete — without implying the encryption key rotated.
 /// `sia_key_freshly_saved` is true only when a new Sia app key was just
 /// merged into the bundle, which is the one case where something in the
 /// bundle actually did change.
@@ -368,10 +387,28 @@ fn repair_status_message(sia_key_freshly_saved: bool) -> &'static str {
     }
 }
 
+/// Decide what (if anything) to write into a bundle whose current contents
+/// are already known this run — `run_with` read it once for the
+/// integrity/reuse check, so `finish_init` doesn't need to probe for it
+/// again with `create()` or `read()`. Merges in a newly chosen Sia app key
+/// while preserving the encryption key exactly (overwriting any Sia key
+/// that was already there, same as the create()-then-repair path); `None`
+/// means nothing actually needs to change, so no write is needed at all.
+fn merge_known_bundle(
+    known: CredentialBundle,
+    sia_app_key: Option<[u8; 32]>,
+) -> Option<CredentialBundle> {
+    sia_app_key.map(|sia_app_key| CredentialBundle {
+        encryption_key: known.encryption_key,
+        sia_app_key: Some(sia_app_key),
+    })
+}
+
 fn finish_init(
     args: &InitArgs,
     config_path: &Path,
     existing: Option<&Config>,
+    known_bundle: Option<CredentialBundle>,
     store: &dyn BundleStore,
 ) -> Result<()> {
     let base = existing.cloned().unwrap_or_default();
@@ -403,11 +440,27 @@ fn finish_init(
         store
             .write(&bundle)
             .context("persisting the credential bundle")?;
+    } else if let Some(known) = known_bundle {
+        // `run_with` already confirmed this exact bundle exists (the
+        // integrity/reuse check's read) — reuse it instead of re-probing
+        // with create() (which would just report AlreadyExists) or read()
+        // again.
+        match merge_known_bundle(known, answers.sia_app_key) {
+            Some(merged) => {
+                store
+                    .write(&merged)
+                    .context("persisting the credential bundle")?;
+                println!("{}", repair_status_message(true));
+            }
+            None => println!("{}", repair_status_message(false)),
+        }
     } else {
-        // Try create-only first: a genuinely fresh install (local or Sia)
-        // succeeds here in one call (ADR-0015). If a bundle already
-        // exists, this is a repair — reviewer-flagged (#72): never silently
-        // regenerate/overwrite an existing encryption key.
+        // No prior read to reuse (a genuinely fresh config, or a bundle
+        // possibly deleted separately from it) — try create-only first: a
+        // genuinely fresh install (local or Sia) succeeds here in one call
+        // (ADR-0015). If a bundle already exists, this is a repair —
+        // reviewer-flagged (#72): never silently regenerate/overwrite an
+        // existing encryption key.
         let key = EncryptionKey::generate().context("generating a new encryption key")?;
         let candidate = CredentialBundle {
             encryption_key: *key.expose_secret(),
@@ -724,6 +777,83 @@ mod tests {
             store.read().unwrap().unwrap().sia_app_key.is_none(),
             "non-interactive mode never collects a new Sia app key"
         );
+    }
+
+    /// When a bundle already exists but is missing its Sia key (config
+    /// points at Sia, but nothing was ever added — an "incomplete" setup),
+    /// `run_with` already reads the bundle once to make that determination.
+    /// `finish_init` must reuse that exact read rather than re-probing with
+    /// `create()`/`read()` again — non-interactive can't add the missing
+    /// key anyway, so this run should touch the store exactly once total.
+    /// Caught via GPT-relayed analysis of a real macOS keychain-prompt
+    /// count during ADR-0015 verification.
+    #[test]
+    fn incomplete_setup_with_a_known_bundle_does_not_re_probe_the_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.toml");
+        let store = MockBundleStore::seeded(CredentialBundle {
+            encryption_key: [0x66; 32],
+            sia_app_key: None,
+        });
+
+        let custom = Config {
+            indexd: Some(IndexdConfig {
+                url: "https://indexd.example.com".to_string(),
+                bucket: "obsidianlog".to_string(),
+            }),
+            ..Config::default()
+        };
+        custom.save(Some(&config_path)).unwrap();
+
+        run_with(&args(true, false), Some(&config_path), &store).unwrap();
+
+        assert_eq!(store.read_calls(), 1, "must read the bundle exactly once");
+        assert_eq!(
+            store.create_calls(),
+            0,
+            "must not re-probe with create() once the bundle is already known from that read"
+        );
+        assert_eq!(
+            store.write_calls(),
+            0,
+            "nothing changed (non-interactive can't add the missing Sia key), so nothing \
+             should be written"
+        );
+        assert_eq!(
+            store.read().unwrap().unwrap().encryption_key,
+            [0x66; 32],
+            "the known bundle's encryption key must be untouched"
+        );
+    }
+
+    #[test]
+    fn merge_known_bundle_preserves_the_key_and_adds_a_freshly_chosen_sia_key() {
+        let known = CredentialBundle {
+            encryption_key: [0x11; 32],
+            sia_app_key: None,
+        };
+        let merged = merge_known_bundle(known, Some([0x22; 32])).unwrap();
+        assert_eq!(merged.encryption_key, [0x11; 32]);
+        assert_eq!(merged.sia_app_key, Some([0x22; 32]));
+    }
+
+    #[test]
+    fn merge_known_bundle_overwrites_a_previously_saved_sia_key() {
+        let known = CredentialBundle {
+            encryption_key: [0x11; 32],
+            sia_app_key: Some([0x99; 32]),
+        };
+        let merged = merge_known_bundle(known, Some([0x22; 32])).unwrap();
+        assert_eq!(merged.sia_app_key, Some([0x22; 32]));
+    }
+
+    #[test]
+    fn merge_known_bundle_is_a_noop_when_nothing_new_was_chosen() {
+        let known = CredentialBundle {
+            encryption_key: [0x11; 32],
+            sia_app_key: None,
+        };
+        assert!(merge_known_bundle(known, None).is_none());
     }
 
     #[test]
