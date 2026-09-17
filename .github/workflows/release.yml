@@ -10,12 +10,15 @@ name: Release
 # create-gh-release-action, since upload-rust-binary-action only uploads to
 # an existing release, it doesn't create one).
 #
-# Ships WITHOUT the `sia` feature by default: the CLI's `serve`/`query`/
-# `verify` only need it when `config.indexd` is set (see
-# crates/obsidianlog-cli/src/backend.rs), and a Sia-configured install without
-# it already fails with a clear "rebuild with --features sia" error rather
-# than silently falling back to local. Users who need Sia support today
-# build it themselves — see the README's CLI section.
+# `obsidianlog` (the CLI binary) is built WITH the `sia` feature: Sia is this
+# project's Foundation-sponsored storage path, not an optional extra, so the
+# official release needs to actually exercise it rather than point testers at
+# a source build for the one path the grant is about. The local backend stays
+# the runtime default either way — `obsidianlog init` only connects to Sia if
+# you choose it — so this only changes what's compiled in, not what happens
+# by default. `obsidianlog-ingest` (the standalone, minimal ingest-only
+# binary) intentionally has no `sia` feature to enable at all — see its own
+# module docs for why that binary stays local-only by design.
 
 on:
   push:
@@ -93,6 +96,10 @@ jobs:
         with:
           bin: obsidianlog,obsidianlog-ingest
           target: ${{ matrix.target }}
+          # Only `obsidianlog` actually has a `sia` feature to enable;
+          # `obsidianlog-ingest` has none, so this applies cleanly to the one
+          # binary it's relevant to without needing a separate build step.
+          features: sia
           # Required whenever `bin` lists more than one binary — the default
           # `$bin-$target` archive name only works for a single binary.
           archive: obsidianlog-$tag-$target

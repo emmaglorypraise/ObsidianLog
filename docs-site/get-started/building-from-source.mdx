@@ -29,8 +29,12 @@ The `obsidianlog` CLI's `init`/`serve` manage this key for you instead — see
 
 ## Building with the Sia backend
 
-The prebuilt release binaries ship **without** the `sia` Cargo feature, since
-it depends on a pre-1.0 SDK. To build with real Sia support:
+The official prebuilt release binaries already ship **with** the `sia` Cargo
+feature — Sia is this project's Foundation-sponsored storage path, so it's
+built into `obsidianlog` by default; `init` still defaults to the local
+backend unless you choose Sia. Building it yourself from source needs the
+feature passed explicitly, since default builds/tests stay Sia-free (it
+depends on a pre-1.0 SDK — see [ADR-0006](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0006-sia-integration.md)):
 
 ```sh
 cargo install --path crates/obsidianlog-cli --features sia

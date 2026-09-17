@@ -63,6 +63,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   credentials preserved; rebuilding configuration." for a plain reuse, or
   "Existing encryption key preserved; Sia app key saved." when the repair
   also adds a Sia app key.
+- The official release binaries now build `obsidianlog` with the `sia`
+  Cargo feature enabled, instead of shipping local-only and pointing Sia
+  users at a source build. `obsidianlog init` still defaults to the local
+  backend regardless — this only changes what's compiled in, not what
+  happens without choosing Sia explicitly. `obsidianlog-ingest` (the
+  standalone, minimal ingest-only binary) stays local-only, unchanged.
 
 ## [0.1.1] - 2026-08-18
 

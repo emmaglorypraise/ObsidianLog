@@ -45,11 +45,14 @@ Run these from an already-open terminal. `obsidianlog` is a command-line
 tool, not a GUI app: double-clicking the binary (or the archive) in Finder
 won't give you an interactive session to type into.
 
-These ship **without** the `sia` Cargo feature (see the
-[CLI section](#using-the-obsidianlog-cli) below); build from source instead
-if you need that today. On macOS, Gatekeeper will flag the binary as
-unsigned the first time. Right-click → Open once, or run
-`xattr -d com.apple.quarantine obsidianlog` to clear it.
+`obsidianlog` (the CLI) ships **with** the `sia` Cargo feature built in — the
+Sia backend works out of the box, no source build required. `obsidianlog init`
+still defaults to the local backend either way; Sia only gets used if you
+choose it. `obsidianlog-ingest` (the standalone, minimal ingest-only binary)
+stays local-only by design — see the [CLI section](#using-the-obsidianlog-cli)
+below. On macOS, Gatekeeper will flag the binary as unsigned the first time.
+Right-click → Open once, or run `xattr -d com.apple.quarantine obsidianlog`
+to clear it.
 
 ### Building from source
 
@@ -130,8 +133,9 @@ confirmation unless you're also non-interactive).
 **Note:** `serve`, `query`, and `verify` select their backend from
 `config.indexd`: `LocalBackend` when unset, the real Sia backend when set
 (see [ADR-0007](docs/adr/0007-indexer-topology.md)). The Sia backend needs
-the `sia` Cargo feature. The prebuilt release binaries ship without it, so
-Sia support means building it yourself:
+the `sia` Cargo feature, already built into the official release binaries —
+there's nothing extra to install. Building `obsidianlog` from source
+yourself still needs it passed explicitly:
 
 ```sh
 cargo install --path crates/obsidianlog-cli --features sia

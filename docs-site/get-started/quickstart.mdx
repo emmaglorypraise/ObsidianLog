@@ -32,10 +32,12 @@ already-open terminal. Double-clicking the binary (or the archive) in
 Finder/Explorer won't give you an interactive session to type into.
 </Note>
 
-These release binaries ship **without** the `sia` Cargo feature — see
-[Building From Source](/get-started/building-from-source) if you need the
-Sia backend today. On macOS, Gatekeeper will flag the binary as unsigned the
-first time: right-click → Open once, or run
+`obsidianlog` (the CLI) ships **with** the `sia` Cargo feature built in — the
+Sia backend works out of the box, no source build needed. `obsidianlog init`
+still defaults to the local backend regardless; Sia only gets used if you
+choose it. `obsidianlog-ingest` (the standalone, minimal ingest-only binary)
+stays local-only by design. On macOS, Gatekeeper will flag the binary as
+unsigned the first time: right-click → Open once, or run
 `xattr -d com.apple.quarantine obsidianlog` to clear it.
 
 ## The init → serve → query → verify loop
