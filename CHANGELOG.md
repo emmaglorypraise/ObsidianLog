@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-16
+
+### Breaking
+
+- Local credential storage changed (ADR-0015): the archive's encryption key
+  and the Sia app key are now stored together as **one** bundled OS-keychain
+  item, replacing the two independent items used through 0.1.x. A config
+  file written by an older release fails to load with a clear message
+  rather than being silently reinterpreted — there is no automatic
+  migration. **To keep reading archives created under 0.1.x, stay on
+  `obsidianlog` v0.1.1.** To move to 0.2, run `obsidianlog init --force`:
+  this generates a new encryption key, so previously archived data will no
+  longer be decryptable under it.
+
+### Fixed
+
+- A fresh `obsidianlog init` (local or Sia) produced multiple separate
+  macOS Keychain authorization prompts, one per keychain call. The new
+  bundled-credential storage, combined with a direct "create only" macOS
+  Keychain write instead of the generic check-then-write pattern, brings
+  this down to exactly one prompt for a clean fresh install (local or Sia
+  alike) and for a plain repair (config file missing, credential still
+  present). A repair that also introduces new credential material — e.g.
+  choosing Sia while an existing bundle was local-only — costs more than
+  one operation by design, prioritizing correctness (the existing
+  encryption key is always read and preserved exactly) over shaving that
+  rarer case's call count.
+- `default_key_store` (credential-store resolution) treated any error from
+  the OS keychain, including the user cancelling or denying an
+  authorization prompt, as "keychain unavailable, fall back to a plain
+  file instead." Only genuine unavailability now triggers that fallback;
+  a cancellation or denial surfaces as a real error.
+- `obsidianlog init --force` read the credential bundle twice: once in a
+  preflight "is setup already complete?" check whose result was then
+  discarded, and again inside the rotation itself to preserve any existing
+  Sia key. The preflight read is now skipped when `--force` is already
+  explicit, cutting a forced rotation from three keychain operations down
+  to two (or to a single write when a new Sia key is chosen in the same
+  run).
+- Onboarding to Sia only validated the recovery phrase *after* the browser
+  approval step completed, so a mistyped phrase (including `SEED` in the
+  wrong case) burned a full approval round-trip — and one of a
+  possibly-limited number of app-connection slots on the indexer — before
+  failing with a generic parse error. The phrase is now validated locally
+  first, and `seed` is matched case-insensitively.
+
+### Changed
+
+- A repair that finds `config.toml` missing but the credential bundle
+  still present (e.g. after accidentally deleting just the config file)
+  re-collects every wizard answer — there's no config left to read the old
+  ones from — which read as "did this just reset my key?" `obsidianlog
+  init` now prints a status line making the outcome explicit: "Existing
+  credentials preserved; rebuilding configuration." for a plain reuse, or
+  "Existing encryption key preserved; Sia app key saved." when the repair
+  also adds a Sia app key.
+
 ## [0.1.1] - 2026-08-18
 
 ### Fixed
@@ -140,6 +197,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   1.9, `keyring` 4.1.4.
 - Recorded ADR-0007 (indexer topology: hosted-default, bring-your-own-indexer).
 
-[Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/emmaglorypraise/ObsidianLog/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/emmaglorypraise/ObsidianLog/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/emmaglorypraise/ObsidianLog/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/emmaglorypraise/ObsidianLog/releases/tag/v0.1.0

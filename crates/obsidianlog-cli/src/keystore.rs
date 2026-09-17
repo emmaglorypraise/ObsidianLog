@@ -1,72 +1,90 @@
-//! User-controlled secret storage: the archive's encryption key, and — when
-//! configured for Sia — the indexd application key.
+//! Local credential storage (ADR-0015): the archive's AES-256 encryption
+//! key, and — when the Sia backend is configured — the indexd application
+//! key, stored together as one [`CredentialBundle`].
 //!
-//! Secrets are generated/collected locally during `obsidianlog init` and never
-//! transmitted. They are stored in the OS keychain via the `keyring` crate
-//! (Linux/macOS/Windows), or — when the keychain is unavailable — an explicit
-//! local secrets file with `0600` permissions. This module is the only place
-//! secrets are read or written; [`EncryptionKey::expose_secret`] exists solely
-//! for this boundary.
+//! Generated/collected once during `obsidianlog init` and never
+//! transmitted. Stored in the OS keychain (Keychain on macOS, Credential
+//! Manager on Windows, Secret Service on Linux) via the `keyring` crate, or
+//! — when the keychain is genuinely unreachable — a `0600` local file. This
+//! module is the only place credentials are read or written.
 //!
-//! [`KeyStore`] persists a raw 32-byte secret under a named account,
-//! independent of what the bytes mean. [`default_encryption_key_store`] and
-//! [`default_sia_app_key_store`] are the two named instances `obsidianlog`
-//! uses — one archive can hold both an encryption key and (if archiving to
-//! Sia) an indexd app key, each stored and rotated independently.
-//!
-//! [`EncryptionKey`]: obsidianlog_store::encrypt::EncryptionKey
+//! On macOS specifically, creating a fresh bundle uses a direct, "create
+//! only" write (see [`BundleStore::create`]) rather than the generic
+//! `keyring` crate's check-then-write pattern, so a fresh `obsidianlog
+//! init` costs exactly one keychain authorization, not two. See ADR-0015
+//! for the full design and the reasoning behind it.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-
-/// Length, in bytes, of every secret this module stores (both the AES-256 key
-/// and the Sia `AppKey` happen to be 32 bytes).
-const SECRET_LEN: usize = 32;
+use serde::{Deserialize, Serialize};
 
 /// Service name used to namespace ObsidianLog entries in the OS keychain.
 pub const KEYRING_SERVICE: &str = "obsidianlog";
-/// Keychain account / secrets-file name for the archive's AES-256 encryption key.
-pub const ENCRYPTION_KEY_ACCOUNT: &str = "encryption-key";
-/// Keychain account / secrets-file name for the Sia indexd application key.
-pub const SIA_APP_KEY_ACCOUNT: &str = "sia-app-key";
+/// Keychain account / file name for the bundled credential.
+pub const CREDENTIAL_BUNDLE_ACCOUNT: &str = "credentials";
 
-/// A 32-byte secret store, keyed by account name. Implemented by
-/// [`KeyringStore`] (the OS keychain) and [`FileKeyStore`] (a `0600` secrets
-/// file); tests use [`MockKeyStore`] so they never touch the real keychain or
-/// filesystem.
-pub trait KeyStore {
-    /// Whether a secret is already stored.
-    fn exists(&self) -> Result<bool>;
+/// The encryption key and, if the Sia backend is configured, the Sia app
+/// key — stored together as one credential rather than as two independent
+/// keychain items (ADR-0015).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CredentialBundle {
+    pub encryption_key: [u8; 32],
+    pub sia_app_key: Option<[u8; 32]>,
+}
 
-    /// Durably persist `secret`, overwriting any existing one.
-    fn store(&self, secret: &[u8; SECRET_LEN]) -> Result<()>;
+impl CredentialBundle {
+    fn to_json(&self) -> String {
+        serde_json::to_string(self).expect("CredentialBundle always serializes")
+    }
 
-    /// Load the previously stored secret.
-    fn load(&self) -> Result<[u8; SECRET_LEN]>;
+    fn from_json(text: &str) -> Result<Self> {
+        serde_json::from_str(text).context("the stored credential bundle is not valid")
+    }
+}
 
-    /// Remove the stored secret (used when rotating).
-    fn delete(&self) -> Result<()>;
+/// The result of [`BundleStore::create`]: whether a new bundle was written,
+/// or one was already there and preserved untouched.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BundleCreateOutcome {
+    Created,
+    AlreadyExists,
+}
 
-    /// A short, human-readable description of where the secret lives (e.g.
+/// Where the bundled credential lives. Implemented by [`KeyringBundleStore`]
+/// (the OS keychain) and [`FileBundleStore`] (a `0600` file); tests use
+/// [`MockBundleStore`] so they never touch the real keychain or filesystem.
+pub trait BundleStore {
+    /// Read the stored bundle, or `None` if nothing is stored yet.
+    fn read(&self) -> Result<Option<CredentialBundle>>;
+
+    /// Unconditionally persist `bundle`, overwriting any existing one. Used
+    /// for explicit rotation and for a repair that merges in new credential
+    /// material — both read first, then write, deliberately never trying to
+    /// collapse that into one call (ADR-0015).
+    fn write(&self, bundle: &CredentialBundle) -> Result<()>;
+
+    /// Write `bundle` only if nothing is stored yet. Returns
+    /// [`BundleCreateOutcome::AlreadyExists`], leaving the existing bundle
+    /// untouched, if one is already present — never overwrites.
+    fn create(&self, bundle: &CredentialBundle) -> Result<BundleCreateOutcome>;
+
+    /// A short, human-readable description of where the bundle lives (e.g.
     /// "the OS keychain" or a file path), for prompts and confirmations.
     fn describe(&self) -> String;
 }
 
-/// Stores a secret in the OS keychain (Keychain on macOS, Credential Manager
-/// on Windows, Secret Service on Linux) via the `keyring` crate.
-pub struct KeyringStore {
+/// Stores the bundle in the OS keychain via the `keyring` crate.
+pub struct KeyringBundleStore {
     service: String,
     account: String,
 }
 
-impl KeyringStore {
-    /// A keychain entry under the given `account` (e.g.
-    /// [`ENCRYPTION_KEY_ACCOUNT`] or [`SIA_APP_KEY_ACCOUNT`]).
-    pub fn new(account: impl Into<String>) -> Self {
+impl KeyringBundleStore {
+    pub fn new() -> Self {
         Self {
             service: KEYRING_SERVICE.to_string(),
-            account: account.into(),
+            account: CREDENTIAL_BUNDLE_ACCOUNT.to_string(),
         }
     }
 
@@ -75,36 +93,43 @@ impl KeyringStore {
     }
 }
 
-impl KeyStore for KeyringStore {
-    fn exists(&self) -> Result<bool> {
+impl Default for KeyringBundleStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl BundleStore for KeyringBundleStore {
+    fn read(&self) -> Result<Option<CredentialBundle>> {
         match self.entry()?.get_password() {
-            Ok(_) => Ok(true),
-            Err(keyring::Error::NoEntry) => Ok(false),
-            Err(e) => Err(e).context("checking the OS keychain"),
+            Ok(text) => Ok(Some(CredentialBundle::from_json(&text)?)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(e).context("reading the credential bundle from the OS keychain"),
         }
     }
 
-    fn store(&self, secret: &[u8; SECRET_LEN]) -> Result<()> {
-        let hex = to_hex(secret);
+    fn write(&self, bundle: &CredentialBundle) -> Result<()> {
         self.entry()?
-            .set_password(&hex)
-            .context("writing the secret to the OS keychain")
+            .set_password(&bundle.to_json())
+            .context("writing the credential bundle to the OS keychain")
     }
 
-    fn load(&self) -> Result<[u8; SECRET_LEN]> {
-        let hex = self
-            .entry()?
-            .get_password()
-            .context("reading the secret from the OS keychain")?;
-        from_hex(hex.trim()).context("OS keychain entry is not a valid secret")
+    #[cfg(target_os = "macos")]
+    fn create(&self, bundle: &CredentialBundle) -> Result<BundleCreateOutcome> {
+        macos::create_only(&self.service, &self.account, bundle.to_json().as_bytes())
     }
 
-    fn delete(&self) -> Result<()> {
-        match self.entry()?.delete_credential() {
-            Ok(()) => Ok(()),
-            Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(e).context("deleting the OS keychain entry"),
+    /// Windows and Linux have different credential-store write semantics
+    /// and no evidence of the same multi-prompt problem macOS has, so they
+    /// keep the generic check-then-write pattern here (ADR-0015) — still
+    /// one item instead of two, just without a specific one-call claim.
+    #[cfg(not(target_os = "macos"))]
+    fn create(&self, bundle: &CredentialBundle) -> Result<BundleCreateOutcome> {
+        if self.read()?.is_some() {
+            return Ok(BundleCreateOutcome::AlreadyExists);
         }
+        self.write(bundle)?;
+        Ok(BundleCreateOutcome::Created)
     }
 
     fn describe(&self) -> String {
@@ -112,69 +137,115 @@ impl KeyStore for KeyringStore {
     }
 }
 
-/// Stores a secret hex-encoded in a file with `0600` permissions
-/// (best-effort on platforms without POSIX permission bits).
-pub struct FileKeyStore {
+/// The macOS-specific create-only path (ADR-0015): calls the lower-level
+/// keychain API directly instead of the `keyring` crate's `set_password`,
+/// which always does its own internal existence check before writing.
+#[cfg(target_os = "macos")]
+mod macos {
+    use super::{BundleCreateOutcome, Result};
+    use anyhow::Context;
+    use security_framework::os::macos::keychain::SecKeychain;
+
+    /// `errSecDuplicateItem` — the item already exists.
+    const ERR_SEC_DUPLICATE_ITEM: i32 = -25299;
+
+    pub(super) fn create_only(
+        service: &str,
+        account: &str,
+        secret: &[u8],
+    ) -> Result<BundleCreateOutcome> {
+        let keychain = SecKeychain::default().context("opening the default macOS keychain")?;
+        match keychain.add_generic_password(service, account, secret) {
+            Ok(()) => Ok(BundleCreateOutcome::Created),
+            Err(e) if e.code() == ERR_SEC_DUPLICATE_ITEM => Ok(BundleCreateOutcome::AlreadyExists),
+            Err(e) => Err(anyhow::Error::from(e))
+                .context("creating the credential bundle in the OS keychain"),
+        }
+    }
+}
+
+/// Stores the bundle as JSON in a file with `0600` permissions (best-effort
+/// on platforms without POSIX permission bits) — the fallback when the OS
+/// keychain is genuinely unreachable.
+pub struct FileBundleStore {
     path: PathBuf,
 }
 
-impl FileKeyStore {
+impl FileBundleStore {
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
     }
 
-    /// The default fallback location for a secret file named `name` (e.g.
-    /// `key.secret`, `sia-app-key.secret`): `~/.obsidianlog/<name>`, matching
-    /// this repo's `.gitignore` (`/.obsidianlog`, `*.secret`).
-    pub fn default_path(name: &str) -> Result<PathBuf> {
+    /// The default fallback location: `~/.obsidianlog/credentials.json`,
+    /// matching this repo's `.gitignore` (`/.obsidianlog`).
+    pub fn default_path() -> Result<PathBuf> {
         let home = std::env::var("HOME")
             .context("HOME is not set; cannot resolve the default secrets path")?;
-        Ok(PathBuf::from(home).join(".obsidianlog").join(name))
+        Ok(PathBuf::from(home)
+            .join(".obsidianlog")
+            .join("credentials.json"))
     }
 
-    /// The path this store reads and writes.
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl KeyStore for FileKeyStore {
-    fn exists(&self) -> Result<bool> {
-        Ok(self.path.exists())
-    }
-
-    fn store(&self, secret: &[u8; SECRET_LEN]) -> Result<()> {
+    fn ensure_parent(&self) -> Result<()> {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("creating secrets directory {}", parent.display()))?;
         }
-        let hex = to_hex(secret);
-        std::fs::write(&self.path, hex)
-            .with_context(|| format!("writing secret file at {}", self.path.display()))?;
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o600))
-                .with_context(|| format!("setting permissions on {}", self.path.display()))?;
-        }
         Ok(())
     }
 
-    fn load(&self) -> Result<[u8; SECRET_LEN]> {
-        let text = std::fs::read_to_string(&self.path)
-            .with_context(|| format!("reading secret file at {}", self.path.display()))?;
-        from_hex(text.trim())
-            .with_context(|| format!("secret file at {} is not valid", self.path.display()))
+    #[cfg(unix)]
+    fn restrict_permissions(&self) -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o600))
+            .with_context(|| format!("setting permissions on {}", self.path.display()))
     }
 
-    fn delete(&self) -> Result<()> {
-        match std::fs::remove_file(&self.path) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => {
-                Err(e).with_context(|| format!("deleting secret file at {}", self.path.display()))
+    #[cfg(not(unix))]
+    fn restrict_permissions(&self) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl BundleStore for FileBundleStore {
+    fn read(&self) -> Result<Option<CredentialBundle>> {
+        match std::fs::read_to_string(&self.path) {
+            Ok(text) => Ok(Some(CredentialBundle::from_json(&text)?)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e)
+                .with_context(|| format!("reading credential file at {}", self.path.display())),
+        }
+    }
+
+    fn write(&self, bundle: &CredentialBundle) -> Result<()> {
+        self.ensure_parent()?;
+        std::fs::write(&self.path, bundle.to_json())
+            .with_context(|| format!("writing credential file at {}", self.path.display()))?;
+        self.restrict_permissions()
+    }
+
+    fn create(&self, bundle: &CredentialBundle) -> Result<BundleCreateOutcome> {
+        self.ensure_parent()?;
+        use std::io::Write;
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&self.path)
+        {
+            Ok(mut file) => {
+                file.write_all(bundle.to_json().as_bytes())
+                    .with_context(|| {
+                        format!("writing credential file at {}", self.path.display())
+                    })?;
+                drop(file);
+                self.restrict_permissions()?;
+                Ok(BundleCreateOutcome::Created)
             }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                Ok(BundleCreateOutcome::AlreadyExists)
+            }
+            Err(e) => Err(e)
+                .with_context(|| format!("creating credential file at {}", self.path.display())),
         }
     }
 
@@ -183,37 +254,7 @@ impl KeyStore for FileKeyStore {
     }
 }
 
-/// Resolve a [`KeyStore`] for `account`/`file_name`: the OS keychain if
-/// reachable, otherwise a `0600` secrets file at
-/// `FileKeyStore::default_path(file_name)` (the caller should tell the user
-/// when this fallback is taken). Also returns whether a secret already
-/// exists there, since resolving the store already requires checking this —
-/// callers should reuse that result instead of calling `exists()` again,
-/// each such call is a separate OS keychain round trip that can prompt for
-/// authorization on its own.
-///
-/// Only falls back to the file store when the keychain itself is genuinely
-/// unreachable ([`keyring::Error::NoStorageAccess`] — e.g. no keychain
-/// service present, or permission/read-only errors at the store level).
-/// Any other error — notably the user cancelling or denying an
-/// authorization prompt — is surfaced as a real error instead of silently
-/// redirecting the secret to a file, which would otherwise change where a
-/// secret is stored based on a one-time user action rather than actual
-/// platform availability.
-fn default_key_store(account: &str, file_name: &str) -> Result<(Box<dyn KeyStore>, bool)> {
-    let keyring = KeyringStore::new(account);
-    match keyring.exists() {
-        Ok(existed) => Ok((Box::new(keyring), existed)),
-        Err(e) if is_keychain_unavailable(&e) => {
-            let file_store = FileKeyStore::new(FileKeyStore::default_path(file_name)?);
-            let existed = file_store.exists()?;
-            Ok((Box::new(file_store), existed))
-        }
-        Err(e) => Err(e),
-    }
-}
-
-/// Whether `err` (from a [`KeyStore::exists`] call on [`KeyringStore`])
+/// Whether `err` (from a [`BundleStore`] call against [`KeyringBundleStore`])
 /// indicates the OS keychain itself is genuinely unreachable, as opposed to
 /// a user-driven cancellation/denial or any other failure that should
 /// surface rather than silently trigger the file-store fallback.
@@ -224,105 +265,194 @@ fn is_keychain_unavailable(err: &anyhow::Error) -> bool {
     )
 }
 
-/// The archive's AES-256 encryption key store — used by every command.
-/// Returns the store alongside whether a key already exists there.
-pub fn default_encryption_key_store() -> Result<(Box<dyn KeyStore>, bool)> {
-    default_key_store(ENCRYPTION_KEY_ACCOUNT, "key.secret")
-}
-
-/// The Sia indexd application key store — only consulted when `config.indexd`
-/// is set (i.e. the Sia backend was chosen during `init`). Returns the store
-/// alongside whether a key already exists there.
-pub fn default_sia_app_key_store() -> Result<(Box<dyn KeyStore>, bool)> {
-    default_key_store(SIA_APP_KEY_ACCOUNT, "sia-app-key.secret")
-}
-
-/// Encode `bytes` as lowercase hex.
-fn to_hex(bytes: &[u8; SECRET_LEN]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-/// Decode a lowercase (or uppercase) hex string into exactly [`SECRET_LEN`] bytes.
-fn from_hex(hex: &str) -> Result<[u8; SECRET_LEN]> {
-    anyhow::ensure!(
-        hex.len() == SECRET_LEN * 2,
-        "expected {} hex characters, got {}",
-        SECRET_LEN * 2,
-        hex.len()
-    );
-    let mut bytes = [0u8; SECRET_LEN];
-    for (i, byte) in bytes.iter_mut().enumerate() {
-        let pair = &hex[i * 2..i * 2 + 2];
-        *byte =
-            u8::from_str_radix(pair, 16).with_context(|| format!("invalid hex byte {pair:?}"))?;
+/// Run `op` against the OS keychain bundle store; if that fails
+/// specifically because the keychain itself is unreachable, retry the same
+/// operation against the file-backed fallback instead. Any other error —
+/// notably the user cancelling or denying an authorization prompt —
+/// propagates rather than silently redirecting to a file. Returns the
+/// result alongside a description of wherever it ended up, for user-facing
+/// messages.
+fn with_bundle_fallback<T>(op: impl Fn(&dyn BundleStore) -> Result<T>) -> Result<(T, String)> {
+    let keyring = KeyringBundleStore::new();
+    match op(&keyring) {
+        Ok(v) => Ok((v, keyring.describe())),
+        Err(e) if is_keychain_unavailable(&e) => {
+            let file = FileBundleStore::new(FileBundleStore::default_path()?);
+            let v = op(&file)?;
+            Ok((v, file.describe()))
+        }
+        Err(e) => Err(e),
     }
-    Ok(bytes)
 }
 
-/// An in-memory [`KeyStore`] for tests, so they never touch the real OS
-/// keychain or filesystem.
-#[cfg(test)]
-pub struct MockKeyStore {
-    secret: std::sync::Mutex<Option<[u8; SECRET_LEN]>>,
+/// Read the stored credential bundle, if any, from the OS keychain (or the
+/// file fallback). Returns `None` when nothing has been stored yet.
+pub fn read_bundle() -> Result<(Option<CredentialBundle>, String)> {
+    with_bundle_fallback(|store| store.read())
 }
 
-#[cfg(test)]
-impl MockKeyStore {
+/// Load the stored credential bundle, erroring clearly if `obsidianlog
+/// init` hasn't been run yet. Used by `serve`/`query`/backend resolution.
+pub fn load_credential_bundle() -> Result<CredentialBundle> {
+    let (bundle, _) = read_bundle()?;
+    bundle.ok_or_else(|| anyhow::anyhow!("no credentials found — run `obsidianlog init` first"))
+}
+
+/// Create the bundle only if nothing is stored yet — the fresh-install and
+/// pure-reuse-repair path (ADR-0015): one call, one keychain prompt.
+pub fn create_bundle(bundle: &CredentialBundle) -> Result<(BundleCreateOutcome, String)> {
+    with_bundle_fallback(|store| store.create(bundle))
+}
+
+/// Unconditionally overwrite the stored bundle — used for explicit
+/// rotation and for a repair that merges in new credential material, both
+/// of which read the existing bundle first (ADR-0015).
+pub fn write_bundle(bundle: &CredentialBundle) -> Result<String> {
+    with_bundle_fallback(|store| store.write(bundle)).map(|(_, desc)| desc)
+}
+
+/// The production [`BundleStore`]: adapts the free-function keychain-with-
+/// file-fallback behavior above into a single implementation, so `init`'s
+/// core logic can be written against one [`BundleStore`] regardless of
+/// which concrete backend a given call ends up using. Tracks the
+/// description of whichever backend last succeeded, for [`describe`].
+///
+/// [`describe`]: BundleStore::describe
+pub struct DefaultBundleStore {
+    last_location: std::cell::RefCell<String>,
+}
+
+impl DefaultBundleStore {
     pub fn new() -> Self {
         Self {
-            secret: std::sync::Mutex::new(None),
-        }
-    }
-
-    pub fn empty() -> Self {
-        Self::new()
-    }
-
-    pub fn seeded(secret: [u8; SECRET_LEN]) -> Self {
-        Self {
-            secret: std::sync::Mutex::new(Some(secret)),
+            last_location: std::cell::RefCell::new("the OS keychain".to_string()),
         }
     }
 }
 
-#[cfg(test)]
-impl Default for MockKeyStore {
+impl Default for DefaultBundleStore {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(test)]
-impl KeyStore for MockKeyStore {
-    fn exists(&self) -> Result<bool> {
-        Ok(self.secret.lock().unwrap().is_some())
+impl BundleStore for DefaultBundleStore {
+    fn read(&self) -> Result<Option<CredentialBundle>> {
+        let (v, location) = with_bundle_fallback(|store| store.read())?;
+        *self.last_location.borrow_mut() = location;
+        Ok(v)
     }
 
-    fn store(&self, secret: &[u8; SECRET_LEN]) -> Result<()> {
-        *self.secret.lock().unwrap() = Some(*secret);
+    fn write(&self, bundle: &CredentialBundle) -> Result<()> {
+        let (_, location) = with_bundle_fallback(|store| store.write(bundle))?;
+        *self.last_location.borrow_mut() = location;
         Ok(())
     }
 
-    fn load(&self) -> Result<[u8; SECRET_LEN]> {
-        self.secret
-            .lock()
-            .unwrap()
-            .ok_or_else(|| anyhow::anyhow!("no secret stored"))
-    }
-
-    fn delete(&self) -> Result<()> {
-        *self.secret.lock().unwrap() = None;
-        Ok(())
+    fn create(&self, bundle: &CredentialBundle) -> Result<BundleCreateOutcome> {
+        let (v, location) = with_bundle_fallback(|store| store.create(bundle))?;
+        *self.last_location.borrow_mut() = location;
+        Ok(v)
     }
 
     fn describe(&self) -> String {
-        "a mock key store (tests only)".to_string()
+        self.last_location.borrow().clone()
+    }
+}
+
+/// An in-memory [`BundleStore`] for tests, so they never touch the real OS
+/// keychain or filesystem. Also counts calls to each method, so tests can
+/// assert exactly how many keychain round-trips a code path costs — not
+/// just that the end state is correct.
+#[cfg(test)]
+pub struct MockBundleStore {
+    bundle: std::sync::Mutex<Option<CredentialBundle>>,
+    read_calls: std::sync::atomic::AtomicUsize,
+    write_calls: std::sync::atomic::AtomicUsize,
+    create_calls: std::sync::atomic::AtomicUsize,
+}
+
+#[cfg(test)]
+impl MockBundleStore {
+    pub fn empty() -> Self {
+        Self {
+            bundle: std::sync::Mutex::new(None),
+            read_calls: std::sync::atomic::AtomicUsize::new(0),
+            write_calls: std::sync::atomic::AtomicUsize::new(0),
+            create_calls: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    pub fn seeded(bundle: CredentialBundle) -> Self {
+        Self {
+            bundle: std::sync::Mutex::new(Some(bundle)),
+            read_calls: std::sync::atomic::AtomicUsize::new(0),
+            write_calls: std::sync::atomic::AtomicUsize::new(0),
+            create_calls: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    pub fn read_calls(&self) -> usize {
+        self.read_calls.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub fn write_calls(&self) -> usize {
+        self.write_calls.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub fn create_calls(&self) -> usize {
+        self.create_calls.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+#[cfg(test)]
+impl Default for MockBundleStore {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+#[cfg(test)]
+impl BundleStore for MockBundleStore {
+    fn read(&self) -> Result<Option<CredentialBundle>> {
+        self.read_calls
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(self.bundle.lock().unwrap().clone())
+    }
+
+    fn write(&self, bundle: &CredentialBundle) -> Result<()> {
+        self.write_calls
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        *self.bundle.lock().unwrap() = Some(bundle.clone());
+        Ok(())
+    }
+
+    fn create(&self, bundle: &CredentialBundle) -> Result<BundleCreateOutcome> {
+        self.create_calls
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let mut guard = self.bundle.lock().unwrap();
+        if guard.is_some() {
+            return Ok(BundleCreateOutcome::AlreadyExists);
+        }
+        *guard = Some(bundle.clone());
+        Ok(BundleCreateOutcome::Created)
+    }
+
+    fn describe(&self) -> String {
+        "a mock bundle store (tests only)".to_string()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn bundle(seed: u8) -> CredentialBundle {
+        CredentialBundle {
+            encryption_key: [seed; 32],
+            sia_app_key: None,
+        }
+    }
 
     fn platform_error() -> Box<dyn std::error::Error + Send + Sync> {
         Box::new(std::io::Error::other("test platform error"))
@@ -356,86 +486,90 @@ mod tests {
     }
 
     #[test]
-    fn hex_round_trips_every_byte_value() {
-        let bytes: [u8; SECRET_LEN] = std::array::from_fn(|i| i as u8);
-        let hex = to_hex(&bytes);
-        assert_eq!(hex.len(), SECRET_LEN * 2);
-        assert_eq!(from_hex(&hex).unwrap(), bytes);
+    fn credential_bundle_round_trips_through_json() {
+        let original = CredentialBundle {
+            encryption_key: [0x42; 32],
+            sia_app_key: Some([0x24; 32]),
+        };
+        let parsed = CredentialBundle::from_json(&original.to_json()).unwrap();
+        assert_eq!(parsed, original);
     }
 
     #[test]
-    fn from_hex_rejects_the_wrong_length() {
-        assert!(from_hex("abcd").is_err());
+    fn credential_bundle_without_a_sia_key_round_trips() {
+        let original = bundle(0x11);
+        let parsed = CredentialBundle::from_json(&original.to_json()).unwrap();
+        assert_eq!(parsed, original);
     }
 
     #[test]
-    fn from_hex_rejects_non_hex_characters() {
-        let bad = "zz".repeat(SECRET_LEN);
-        assert!(from_hex(&bad).is_err());
+    fn mock_bundle_store_create_then_read_round_trips() {
+        let store = MockBundleStore::empty();
+        assert!(store.read().unwrap().is_none());
+
+        let outcome = store.create(&bundle(1)).unwrap();
+        assert_eq!(outcome, BundleCreateOutcome::Created);
+        assert_eq!(store.read().unwrap(), Some(bundle(1)));
     }
 
     #[test]
-    fn mock_key_store_stores_and_retrieves() {
-        let store = MockKeyStore::empty();
-        assert!(!store.exists().unwrap());
-        assert!(store.load().is_err());
-
-        let secret = [0x42u8; SECRET_LEN];
-        store.store(&secret).unwrap();
-        assert!(store.exists().unwrap());
-        assert_eq!(store.load().unwrap(), secret);
-
-        store.delete().unwrap();
-        assert!(!store.exists().unwrap());
+    fn mock_bundle_store_create_preserves_an_existing_bundle() {
+        let store = MockBundleStore::seeded(bundle(1));
+        let outcome = store.create(&bundle(2)).unwrap();
+        assert_eq!(outcome, BundleCreateOutcome::AlreadyExists);
+        assert_eq!(
+            store.read().unwrap(),
+            Some(bundle(1)),
+            "create must never overwrite an existing bundle"
+        );
     }
 
     #[test]
-    fn mock_key_store_seeded_starts_populated() {
-        let secret = [0x24u8; SECRET_LEN];
-        let store = MockKeyStore::seeded(secret);
-        assert!(store.exists().unwrap());
-        assert_eq!(store.load().unwrap(), secret);
+    fn mock_bundle_store_write_overwrites() {
+        let store = MockBundleStore::seeded(bundle(1));
+        store.write(&bundle(2)).unwrap();
+        assert_eq!(store.read().unwrap(), Some(bundle(2)));
     }
 
     #[test]
-    fn file_key_store_round_trips_through_a_0600_file() {
+    fn file_bundle_store_create_then_read_round_trips() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("key.secret");
-        let store = FileKeyStore::new(&path);
+        let store = FileBundleStore::new(dir.path().join("credentials.json"));
 
-        assert!(!store.exists().unwrap());
-        let secret = [0xABu8; SECRET_LEN];
-        store.store(&secret).unwrap();
-        assert!(store.exists().unwrap());
-        assert_eq!(store.load().unwrap(), secret);
+        assert!(store.read().unwrap().is_none());
+        let outcome = store.create(&bundle(7)).unwrap();
+        assert_eq!(outcome, BundleCreateOutcome::Created);
+        assert_eq!(store.read().unwrap(), Some(bundle(7)));
 
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-            assert_eq!(mode, 0o600, "secret file must be 0600");
+            let mode = std::fs::metadata(dir.path().join("credentials.json"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o600, "credential file must be 0600");
         }
-
-        store.delete().unwrap();
-        assert!(!store.exists().unwrap());
-        // Deleting an already-absent secret is not an error (used by rotation).
-        store.delete().unwrap();
     }
 
     #[test]
-    fn two_named_stores_are_independent() {
+    fn file_bundle_store_create_preserves_an_existing_bundle() {
         let dir = tempfile::tempdir().unwrap();
-        let encryption = FileKeyStore::new(dir.path().join("key.secret"));
-        let sia = FileKeyStore::new(dir.path().join("sia-app-key.secret"));
+        let store = FileBundleStore::new(dir.path().join("credentials.json"));
+        store.write(&bundle(1)).unwrap();
 
-        encryption.store(&[0x11; SECRET_LEN]).unwrap();
-        assert!(
-            !sia.exists().unwrap(),
-            "storing one must not affect the other"
-        );
+        let outcome = store.create(&bundle(2)).unwrap();
+        assert_eq!(outcome, BundleCreateOutcome::AlreadyExists);
+        assert_eq!(store.read().unwrap(), Some(bundle(1)));
+    }
 
-        sia.store(&[0x22; SECRET_LEN]).unwrap();
-        assert_eq!(encryption.load().unwrap(), [0x11; SECRET_LEN]);
-        assert_eq!(sia.load().unwrap(), [0x22; SECRET_LEN]);
+    #[test]
+    fn file_bundle_store_write_overwrites() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FileBundleStore::new(dir.path().join("credentials.json"));
+        store.write(&bundle(1)).unwrap();
+        store.write(&bundle(2)).unwrap();
+        assert_eq!(store.read().unwrap(), Some(bundle(2)));
     }
 }

@@ -1812,7 +1812,7 @@ dependencies = [
 
 [[package]]
 name = "obsidianlog-cli"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1822,6 +1822,7 @@ dependencies = [
  "obsidianlog-core",
  "obsidianlog-ingest",
  "obsidianlog-store",
+ "security-framework",
  "serde",
  "serde_json",
  "tempfile",
@@ -1831,7 +1832,7 @@ dependencies = [
 
 [[package]]
 name = "obsidianlog-core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1842,7 +1843,7 @@ dependencies = [
 
 [[package]]
 name = "obsidianlog-ingest"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "axum",
  "chrono",
@@ -1859,7 +1860,7 @@ dependencies = [
 
 [[package]]
 name = "obsidianlog-store"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "aes-gcm",
  "async-trait",

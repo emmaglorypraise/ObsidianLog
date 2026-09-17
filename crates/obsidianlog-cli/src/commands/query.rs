@@ -23,12 +23,7 @@ use crate::keystore;
 /// Execute a query and render results to stdout.
 pub fn run(args: QueryArgs, config_path: Option<PathBuf>) -> Result<()> {
     let config = Config::load(config_path.as_deref())?;
-    let key = EncryptionKey::new(
-        keystore::default_encryption_key_store()?
-            .0
-            .load()
-            .context("loading the encryption key (run `obsidianlog init` first)")?,
-    );
+    let key = EncryptionKey::new(keystore::load_credential_bundle()?.encryption_key);
 
     let now = Utc::now();
     let since = args

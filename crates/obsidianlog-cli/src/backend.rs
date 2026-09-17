@@ -26,10 +26,9 @@ async fn connect_sia(indexd: &crate::config::IndexdConfig) -> Result<AnyBackend>
     use anyhow::Context;
     use obsidianlog_store::backend::{SiaBackend, SiaConfig};
 
-    let app_key = crate::keystore::default_sia_app_key_store()?
-        .0
-        .load()
-        .context("loading the Sia app key (run `obsidianlog init` and choose the sia backend)")?;
+    let app_key = crate::keystore::load_credential_bundle()?
+        .sia_app_key
+        .context("no Sia app key stored — run `obsidianlog init` and choose the sia backend")?;
 
     let backend = SiaBackend::connect(SiaConfig {
         indexer_url: indexd.url.clone(),

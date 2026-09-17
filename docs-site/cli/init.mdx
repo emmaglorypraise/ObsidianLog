@@ -30,13 +30,25 @@ Plus the global [`--config <FILE>`](/cli/overview#global-flags).
 4. **Ingest server bind address** — default `127.0.0.1:7080`.
 5. **Chunk time window (seconds)** — default `3600`.
 
-## Where keys live
+## Where credentials live
 
-The encryption key (and, if you chose Sia, the indexd app key) are stored in
-your OS keychain via the `keyring` crate — Keychain on macOS, Credential
-Manager on Windows, Secret Service on Linux — falling back to a `0600`
-secrets file (`~/.obsidianlog/`) if the keychain isn't reachable. Keys are
-never transmitted or committed anywhere.
+The encryption key and, if you chose Sia, the indexd app key are stored
+together as one bundled credential — Keychain on macOS, Credential Manager
+on Windows, Secret Service on Linux — falling back to a `0600` secrets file
+(`~/.obsidianlog/`) if the keychain isn't reachable. Never transmitted or
+committed anywhere.
+
+A fresh setup means exactly one keychain authorization prompt, whether you
+choose the local or the Sia backend. On macOS this uses a direct,
+"create only" keychain write rather than the usual check-then-write pattern
+most tools use — see [ADR-0015](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0015-bundled-credential-single-prompt-setup.md)
+for why that matters.
+
+A config file from before this bundled format (obsidianlog 0.1.x) isn't
+migrated automatically: `init` fails with a clear message telling you to
+either stay on `obsidianlog` v0.1.1 to keep reading archives created under
+it, or pass `--force` to knowingly start fresh (this rotates the encryption
+key).
 
 ## Example
 
