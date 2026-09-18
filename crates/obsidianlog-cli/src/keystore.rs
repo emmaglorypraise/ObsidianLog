@@ -258,10 +258,16 @@ impl BundleStore for FileBundleStore {
 /// indicates the OS keychain itself is genuinely unreachable, as opposed to
 /// a user-driven cancellation/denial or any other failure that should
 /// surface rather than silently trigger the file-store fallback.
+///
+/// Two variants indicate genuine unavailability: `NoStorageAccess` (a store
+/// exists but can't be reached — e.g. locked) and `NoDefaultStore` (no
+/// store could be registered at all — e.g. a headless Linux environment
+/// with no D-Bus Secret Service running, such as a bare CI runner or many
+/// minimal containers).
 fn is_keychain_unavailable(err: &anyhow::Error) -> bool {
     matches!(
         err.downcast_ref::<keyring::Error>(),
-        Some(keyring::Error::NoStorageAccess(_))
+        Some(keyring::Error::NoStorageAccess(_) | keyring::Error::NoDefaultStore)
     )
 }
 
@@ -461,6 +467,18 @@ mod tests {
     #[test]
     fn no_storage_access_is_treated_as_keychain_unavailable() {
         let err = anyhow::Error::new(keyring::Error::NoStorageAccess(platform_error()));
+        assert!(is_keychain_unavailable(&err));
+    }
+
+    /// A headless Linux environment with no D-Bus Secret Service running
+    /// (a bare CI runner, many minimal containers) never registers a
+    /// default credential store at all, so `keyring` returns this distinct
+    /// variant rather than `NoStorageAccess` — the fallback must still
+    /// trigger for it. Regression: broke the `demo.yml` CI pipeline, and
+    /// would break real headless-Linux `obsidianlog init` the same way.
+    #[test]
+    fn no_default_store_is_treated_as_keychain_unavailable() {
+        let err = anyhow::Error::new(keyring::Error::NoDefaultStore);
         assert!(is_keychain_unavailable(&err));
     }
 

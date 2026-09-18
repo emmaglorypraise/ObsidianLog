@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `default_key_store`'s fallback to the local secrets file only triggered
+  on `keyring::Error::NoStorageAccess`, missing a distinct error variant
+  (`NoDefaultStore`) that a headless Linux environment with no D-Bus Secret
+  Service running (bare CI runners, many minimal containers) returns
+  instead — no store could be reached at all, so `obsidianlog init`
+  hard-failed rather than falling back. Broke the `demo.yml` CI pipeline,
+  and would break the same way for real headless-Linux use.
+
 ## [0.2.0] - 2026-09-18
 
 ### Breaking
