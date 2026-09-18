@@ -26,6 +26,14 @@
         ]
       },
       {
+        "group": "Tutorials",
+        "pages": [
+          "tutorials/local-backend",
+          "tutorials/sia-backend",
+          "tutorials/returning-user"
+        ]
+      },
+      {
         "group": "Storage Backends",
         "pages": [
           "storage-backends/local-backend",

@@ -1,0 +1,87 @@
+---
+title: "Testing as a Returning User"
+description: "What to check the second time around: config repair, key rotation, and adding Sia to an existing local setup."
+---
+
+The first two tutorials cover a brand new install. This one covers what
+happens when you come back to an install you already have, since that's
+a genuinely different code path, not just "run init again."
+
+Do this after you've already completed
+[Testing the Local Backend](/tutorials/local-backend) at least once, so
+you have an existing setup to come back to.
+
+## Scenario 1: you deleted config.toml by accident
+
+This is a real thing that happens, and it used to be dangerous: an older
+version of ObsidianLog would silently generate a brand new encryption
+key in this situation, making everything you'd already archived
+undecryptable. That's fixed now, and this scenario is here specifically
+to prove it.
+
+Find your config file (`init` printed its path when you ran it) and
+delete it:
+
+```sh
+rm ~/.config/obsidianlog/config.toml
+./obsidianlog init
+```
+
+You'll be asked all the setup questions again, since there's no config
+file left to read your old answers from. That part is expected. What
+matters is what happens to your key. Answer the prompts the same way you
+did the first time (local backend), and watch for this line before the
+final summary:
+
+```text
+Existing credentials preserved; rebuilding configuration.
+```
+
+That confirms your original encryption key survived. If you archived
+anything in the local backend tutorial, you can prove it directly:
+
+```sh
+./obsidianlog query --service tutorial --format human
+```
+
+If your original log line still comes back, the key really was
+preserved, not silently reset.
+
+## Scenario 2: rotating the key on purpose
+
+Sometimes you do want a new key, for example if you think the old one
+was exposed. That's what `--force` is for:
+
+```sh
+./obsidianlog init --force
+```
+
+This time you'll see a warning that previously archived data will no
+longer be decryptable, and (unless you're scripting with
+`--non-interactive`) a confirmation prompt before it proceeds. After
+confirming, a genuinely new key is generated. If you try the same
+`query` command above afterward, it will no longer be able to read data
+that was archived under the old key. That's expected here since it's the
+whole point of rotation.
+
+## Scenario 3: adding Sia to an existing local setup
+
+If you completed the local backend tutorial and want to add Sia to that
+same install, rather than starting a separate one:
+
+```sh
+./obsidianlog init
+```
+
+When asked "Existing setup found... Reuse it?", answer **no**. You'll
+then be asked to confirm reconfiguring, and can choose **sia** this time
+instead of local. Your existing encryption key is preserved throughout,
+only a new Sia app key gets added to it.
+
+## Tell me how it went
+
+As with the other tutorials, a
+[feedback report](https://github.com/emmaglorypraise/ObsidianLog/issues/new?template=feedback.yml)
+helps, especially if any of these three scenarios behaved differently
+than described here. That's exactly the kind of thing worth catching
+before a wider release.
