@@ -1,0 +1,106 @@
+name: Tried ObsidianLog? Tell me about it
+description: Share feedback from trying out ObsidianLog — this isn't a bug report.
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying ObsidianLog! Any feedback helps, even short and
+        informal — this doesn't need to be a polished report.
+
+        **Please don't include secrets in this form**: no recovery phrases,
+        encryption keys, API keys, Keychain data, full config files, or
+        real log contents.
+
+        Please submit this form for your test outcome either way — if you
+        also have reproducible bug details, you're welcome to open a
+        **Bug report** too (from the "New issue" page) and link it here.
+  - type: input
+    id: version
+    attributes:
+      label: Version tested
+      placeholder: "e.g. v0.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Install method
+      options:
+        - "Official release binary"
+        - "Source build (cargo build)"
+        - "Docker"
+    validations:
+      required: true
+  - type: dropdown
+    id: what-tried
+    attributes:
+      label: What did you try?
+      multiple: true
+      options:
+        - "Fresh local install (obsidianlog init, local backend)"
+        - "Sia backend (obsidianlog init, choosing Sia)"
+        - "Vector integration"
+        - "Docker Compose quickstart"
+        - "Grafana / SIEM example integration"
+        - "Just read the docs, didn't run it yet"
+        - "Other"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: "e.g. macOS 15 (Apple Silicon), Ubuntu 24.04, Windows 11"
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: How far did you get?
+      description: >-
+        Both "completed" and "stopped partway" count as a real test; "read
+        docs only" is useful but isn't a test run.
+      options:
+        - "Completed the init → ingest → query → verify loop"
+        - "Stopped before completing the workflow"
+        - "Read the docs only; did not run it"
+    validations:
+      required: true
+  - type: textarea
+    id: confusing
+    attributes:
+      label: What was confusing, slow, or friction-y?
+      description: Setup steps, docs, error messages, anything that made you pause.
+    validations:
+      required: false
+  - type: input
+    id: init-time
+    attributes:
+      label: Approximate init time (optional)
+      description: Only if you happened to notice — no need to go back and measure.
+      placeholder: "e.g. ~3 minutes"
+    validations:
+      required: false
+  - type: input
+    id: ingest-to-query-time
+    attributes:
+      label: Approximate first-ingest-to-query time (optional)
+      description: >-
+        Time from sending your first log batch to being able to query it
+        back. Only if you happened to notice.
+      placeholder: "e.g. ~30 seconds (local) / ~5 minutes (Sia, first write)"
+    validations:
+      required: false
+  - type: textarea
+    id: use-for-real
+    attributes:
+      label: Would you use this for real? Why or why not?
+    validations:
+      required: false
+  - type: textarea
+    id: anything-else
+    attributes:
+      label: Anything else?
+    validations:
+      required: false
