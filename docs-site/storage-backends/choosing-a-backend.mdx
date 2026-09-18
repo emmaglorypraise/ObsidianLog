@@ -9,16 +9,17 @@ through the same wizard, and none require touching code.
 | Backend | Infrastructure you run | Who pays for storage | Best for |
 | --- | --- | --- | --- |
 | [Local](/storage-backends/local-backend) | None (filesystem only) | N/A, no Sia network involved | Development, testing, offline/air-gapped use |
-| [Hosted (Sia Storage)](/storage-backends/hosted-sia-storage) | None | Your `sia.storage` account's own plan (50GB free tier) | Most users, real Sia durability, zero setup |
+| [Hosted (Sia Storage)](/storage-backends/hosted-sia-storage) | None | Subject to your Sia Storage account's current plan and quota | Most users who want managed, durable Sia storage |
 | [Bring Your Own Indexer](/storage-backends/bring-your-own-indexer) | Your own `indexd` (or a partner's) | You, via your own wallet | Compliance/regulated environments wanting full control |
 
 ## Recommendation
 
 Start with **Local** to evaluate ObsidianLog with zero setup. Move to
 **Hosted (Sia Storage)** when you want real, durable, off-site archival. It
-costs nothing beyond your `sia.storage` account's own plan and requires no
-infrastructure from you. Only reach for **Bring Your Own Indexer** if you
-specifically need to control the wallet and infrastructure yourself.
+requires no indexer infrastructure from you, but it does require Sia Storage
+account approval and is subject to that service's current plan and terms.
+Only reach for **Bring Your Own Indexer** if you specifically need to control
+the wallet and infrastructure yourself.
 
 ## Switching later
 

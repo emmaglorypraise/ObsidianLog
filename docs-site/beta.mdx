@@ -1,0 +1,65 @@
+---
+title: "Beta Testing"
+description: "Everything you need to try ObsidianLog: get the release, pick what to test, tell us how it went."
+---
+
+ObsidianLog is long-term, tamper-evident log archival on Sia. It's
+encrypted before it ever leaves your machine, compressed, and
+hash-chained so you can prove later that nothing was altered. It's in
+active beta right now, and we'd genuinely love for you to try it.
+
+## 1. Get the release
+
+[Download the latest release](https://github.com/emmaglorypraise/ObsidianLog/releases)
+for your platform. Not sure which file you need? See the
+[FAQ](/get-started/faq).
+
+## 2. Pick what to test
+
+<CardGroup cols={2}>
+  <Card title="Start here: local test" href="/tutorials/local-backend">
+    Recommended first test. Local backend only, no Sia account needed. About 5 minutes.
+  </Card>
+  <Card title="Want to test Sia?" href="/tutorials/sia-backend">
+    Connect to the real Sia network and archive for real. Allow 15–20 minutes for browser approval and the first write.
+  </Card>
+  <Card title="Already using Vector?" href="/tutorials/vector-integration">
+    Ship real logs through Vector into ObsidianLog. About 10 minutes.
+  </Card>
+  <Card title="Coming back a second time?" href="/tutorials/returning-user">
+    Test config repair, key rotation, and adding Sia to an existing setup.
+  </Card>
+</CardGroup>
+
+<Note>
+Use only sample logs while testing. Never put recovery phrases, encryption
+keys, API keys, full config files, or real log content into a public issue.
+</Note>
+
+## What counts as a completed beta test?
+
+A completed test is a tutorial run through to its stated final check. For the
+local, Sia, and Vector paths, that means retrieving the sample log with
+`query` and confirming the hash chain with `verify`. If you get stuck before
+that point, that is still valuable feedback: tell us where you stopped and
+what you expected to happen.
+
+For the Sia tutorial, the first network write can take several minutes after
+browser approval. That delay is expected. Please include the time you saw in
+your feedback.
+
+## 3. Tell us how it went
+
+<CardGroup cols={2}>
+  <Card title="Give feedback" href="https://github.com/emmaglorypraise/ObsidianLog/issues/new?template=feedback.yml">
+    Tried it? Good or bad, we want to know, even briefly.
+  </Card>
+  <Card title="Report a bug" href="https://github.com/emmaglorypraise/ObsidianLog/issues/new?template=bug_report.yml">
+    Something broke? Tell us exactly what happened.
+  </Card>
+  <Card title="Ask a question" href="https://github.com/emmaglorypraise/ObsidianLog/discussions">
+    Need help while testing? Start a discussion.
+  </Card>
+</CardGroup>
+
+Thanks for taking the time to try this out. It genuinely helps.

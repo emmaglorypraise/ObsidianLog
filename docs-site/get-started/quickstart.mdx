@@ -5,52 +5,142 @@ description: "Install a release binary and run your first init → serve → ing
 
 ## Installing a release binary
 
-Grab the archive for your platform from the
-[Releases page](https://github.com/emmaglorypraise/ObsidianLog/releases). The
-filename follows the pattern `obsidianlog-<version>-<target>.tar.gz` (`.zip`
-on Windows), where `<target>` is one of `aarch64-apple-darwin`,
-`x86_64-apple-darwin`, `aarch64-unknown-linux-musl`,
-`x86_64-unknown-linux-musl`, or `x86_64-pc-windows-msvc`. Each archive
-contains both binaries directly (no subfolder): `obsidianlog` (the CLI) and
-`obsidianlog-ingest` (the standalone ingest server). No installer, no
-dependencies.
+Download the archive for your system from the
+[Releases page](https://github.com/emmaglorypraise/ObsidianLog/releases)
+(under **Assets**, on the latest release). Not sure which file you need?
+See the [FAQ](/get-started/faq). Each archive contains two binaries
+directly: `obsidianlog` (the CLI) and `obsidianlog-ingest` (the standalone
+ingest server). There's no installer and no dependencies to install
+separately.
 
-For example, extracting on Apple Silicon:
+Whether extracting it lands those two files in their own folder depends
+on how you extract it. Double-clicking the archive (or Extract All on
+Windows) creates a new folder named after it automatically. Extracting
+from a raw `tar` command doesn't, it dumps the files into whatever
+directory you're already in. The commands below account for both, so you
+end up in a tidy folder either way.
 
-```sh
-tar -xzf obsidianlog-v0.1.1-aarch64-apple-darwin.tar.gz
-chmod +x obsidianlog obsidianlog-ingest   # the executable bit isn't always preserved in the archive
-./obsidianlog init
-```
+<Tabs>
+  <Tab title="macOS">
+    Double-click the downloaded `.tar.gz` file in Finder. It extracts into
+    a new folder named after the archive. Open that folder, open a
+    terminal there, and run:
+    ```sh
+    chmod +x obsidianlog obsidianlog-ingest
+    ./obsidianlog init
+    ```
+    Prefer to do the extraction from a terminal too?
+    ```sh
+    cd ~/Downloads
+    mkdir obsidianlog-<version>-<target>
+    tar -xzf obsidianlog-<version>-<target>.tar.gz -C obsidianlog-<version>-<target>
+    cd obsidianlog-<version>-<target>
+    chmod +x obsidianlog obsidianlog-ingest
+    ./obsidianlog init
+    ```
+  </Tab>
+  <Tab title="Windows">
+    Right-click the downloaded `.zip` file in File Explorer and choose
+    **Extract All**. It suggests a new folder named after the archive,
+    accept the default. Open that folder, open PowerShell there
+    (Shift + right-click → **Open PowerShell window here**, or right-click
+    → **Open in Terminal**), and run:
+    ```powershell
+    .\obsidianlog.exe init
+    ```
+    No `chmod` step needed, `.exe` files are already executable. Prefer
+    PowerShell for the extraction too?
+    ```powershell
+    cd ~\Downloads
+    mkdir obsidianlog-<version>-x86_64-pc-windows-msvc
+    Expand-Archive obsidianlog-<version>-x86_64-pc-windows-msvc.zip -DestinationPath obsidianlog-<version>-x86_64-pc-windows-msvc
+    cd obsidianlog-<version>-x86_64-pc-windows-msvc
+    .\obsidianlog.exe init
+    ```
+  </Tab>
+  <Tab title="Linux">
+    Extracting via your file manager (double-click, or right-click →
+    Extract) typically creates a new folder named after the archive. Open
+    that folder, open a terminal there, and run:
+    ```sh
+    chmod +x obsidianlog obsidianlog-ingest
+    ./obsidianlog init
+    ```
+    Prefer to do the extraction from a terminal too?
+    ```sh
+    cd ~/Downloads
+    mkdir obsidianlog-<version>-<target>
+    tar -xzf obsidianlog-<version>-<target>.tar.gz -C obsidianlog-<version>-<target>
+    cd obsidianlog-<version>-<target>
+    chmod +x obsidianlog obsidianlog-ingest
+    ./obsidianlog init
+    ```
+  </Tab>
+</Tabs>
 
-Swap in whichever version and target you actually downloaded, matching the
-exact filename from the Releases page.
+The exact filename depends on which release and target you downloaded,
+matching what you got from the Releases page. The `chmod` step on
+macOS/Linux is needed because the executable bit isn't always preserved
+inside the archive.
 
 <Note>
-`obsidianlog` is a command-line tool, not a GUI app. Run these from an
-already-open terminal. Double-clicking the binary (or the archive) in
-Finder/Explorer won't give you an interactive session to type into.
+`obsidianlog` is a command-line tool, not a GUI app. The commands above need
+an actual terminal (Terminal on macOS, PowerShell or Windows Terminal on
+Windows, your terminal app on Linux). Double-clicking the binary itself
+does **not** start setup: it has no command to run, so it prints the help
+screen and exits. Open a terminal, change into the extracted folder, then
+run `./obsidianlog init` (or `.\obsidianlog.exe init` on Windows).
 </Note>
+
+On macOS, the quickest way to open the right folder in Terminal is to open
+Terminal, type `cd ` (including the space), then drag the extracted folder
+from Finder into the Terminal window and press Enter. Then run:
+
+```sh
+./obsidianlog init
+```
 
 `obsidianlog` (the CLI) ships **with** the `sia` Cargo feature built in. The
 Sia backend works out of the box, no source build needed. `obsidianlog init`
 still defaults to the local backend regardless. Sia only gets used if you
 choose it. `obsidianlog-ingest` (the standalone, minimal ingest-only binary)
-stays local-only by design. On macOS, Gatekeeper will flag the binary as
-unsigned the first time: right-click → Open once, or run
-`xattr -d com.apple.quarantine obsidianlog` to clear it.
+stays local-only by design.
+
+The first time you run it, your OS may flag it as unsigned, since these
+binaries aren't code-signed today:
+
+<Tabs>
+  <Tab title="macOS">
+    Gatekeeper blocks it. Right-click `obsidianlog` in Finder and choose
+    **Open** once, or run `xattr -d com.apple.quarantine obsidianlog` in a
+    terminal.
+  </Tab>
+  <Tab title="Windows">
+    SmartScreen shows "Windows protected your PC." Click **More info**,
+    then **Run anyway**.
+  </Tab>
+  <Tab title="Linux">
+    There's no equivalent prompt. As long as `chmod +x` was run, it just
+    works.
+  </Tab>
+</Tabs>
 
 ## The init → serve → query → verify loop
 
 The CLI wraps setup, ingestion, retrieval, and integrity checking:
 
+The commands below assume you are still in the folder you extracted and use
+`./obsidianlog` on macOS/Linux. On Windows, use `./obsidianlog` as
+`.\obsidianlog.exe` instead. Leave `serve` running, then open a second
+terminal in that same folder for the `curl`, `query`, and `verify` commands.
+
 ```sh
 # One-time setup: generates the encryption key (OS keychain, or a 0600
 # secrets file if the keychain isn't available) and writes config.toml.
-obsidianlog init
+./obsidianlog init
 
 # Run the ingest server using that config.
-obsidianlog serve
+./obsidianlog serve
 
 # In another terminal: send it a log batch.
 curl -s -X POST http://localhost:7080/ingest \
@@ -59,11 +149,11 @@ curl -s -X POST http://localhost:7080/ingest \
 
 # Query archived logs. Filters compose, and results are decrypted
 # index-first (only matching chunks are fetched).
-obsidianlog query --service api --level error --from 24h --format human
+./obsidianlog query --service api --level info --from 24h --format human
 
 # Walk every service's hash chain from genesis and confirm it's intact.
 # Exits non-zero on any break, so CI/cron can gate on it.
-obsidianlog verify
+./obsidianlog verify
 ```
 
 See the full [CLI reference](/cli/overview) for every command's flags.

@@ -11,8 +11,10 @@
         "group": "Get Started",
         "pages": [
           "index",
+          "beta",
           "get-started/quickstart",
-          "get-started/building-from-source"
+          "get-started/building-from-source",
+          "get-started/faq"
         ]
       },
       {
@@ -30,7 +32,8 @@
         "pages": [
           "tutorials/local-backend",
           "tutorials/sia-backend",
-          "tutorials/returning-user"
+          "tutorials/returning-user",
+          "tutorials/vector-integration"
         ]
       },
       {
@@ -68,6 +71,7 @@
         "group": "Project",
         "pages": [
           "project/contributing",
+          "project/testing-against-sia",
           "project/where-to-get-help"
         ]
       }

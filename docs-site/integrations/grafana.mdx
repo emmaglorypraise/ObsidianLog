@@ -22,8 +22,16 @@ script exports a query to JSON and serves it over HTTP:
 
 ```sh
 obsidianlog query --format json > logs.json
-python3 -m http.server 8787   # serves logs.json at :8787/logs.json
+python3 -m http.server 8787 --bind 127.0.0.1   # serves logs.json at :8787/logs.json
 ```
+
+<Warning>
+`logs.json` contains decrypted log data. The example binds the temporary
+server to localhost deliberately. Do not expose it publicly. If Grafana runs
+on another host, put an authenticated, TLS-protected proxy in front of a
+purpose-built export path instead of opening this temporary server to the
+network.
+</Warning>
 
 The full, runnable version, with argument handling and the run
 instructions, is

@@ -4,30 +4,22 @@ description: "Connect ObsidianLog to the real Sia network and archive, query, an
 ---
 
 This walks through connecting ObsidianLog to Sia for real, using the
-hosted, zero-setup indexer at [sia.storage](https://sia.storage). You
-don't need to run any Sia infrastructure yourself.
-
-If you haven't tried [Testing the Local Backend](/tutorials/local-backend)
-yet, do that one first. It's faster to debug a problem there than here,
-since there's no network or account involved.
+hosted Sia Storage indexer at [sia.storage](https://sia.storage). You don't
+need to run Sia infrastructure yourself, but you will approve ObsidianLog
+through a Sia Storage account during setup.
 
 Takes about ten minutes, most of it waiting on a one-time Sia write.
 
 ## 1. Get the binary
 
-Same as the local backend tutorial: grab the archive for your platform
-from the
-[Releases page](https://github.com/emmaglorypraise/ObsidianLog/releases)
-and extract it. The `sia` backend is already built into the official
+Download and extract the release binary for your system, following
+[Installing a release binary](/get-started/quickstart#installing-a-release-binary)
+in the Quickstart (or the [FAQ](/get-started/faq) if you're not sure which
+file to grab). The `sia` backend is already built into the official
 release binary, so there's nothing extra to install or compile.
 
-```sh
-curl -LO https://github.com/emmaglorypraise/ObsidianLog/releases/download/v0.2.0/obsidianlog-v0.2.0-aarch64-apple-darwin.tar.gz
-tar -xzf obsidianlog-v0.2.0-aarch64-apple-darwin.tar.gz
-chmod +x obsidianlog obsidianlog-ingest
-```
-
-Swap in your actual platform's filename.
+The rest of this tutorial writes commands as `./obsidianlog` (macOS/Linux).
+On Windows, that's `.\obsidianlog.exe` instead.
 
 ## 2. Run init and choose Sia
 
@@ -35,8 +27,13 @@ Swap in your actual platform's filename.
 ./obsidianlog init --config sia-test/config.toml
 ```
 
-Using a separate `--config` path like this keeps this test independent
-from anything you set up in the local backend tutorial.
+Using a separate `--config` path like this keeps this test's configuration
+and local data separate from anything you set up in the local backend
+tutorial. The credential bundle is shared by your OS user, though: if you
+already ran `init`, ObsidianLog safely reuses the existing encryption key and
+adds the Sia app key to that bundle. For a genuinely clean keychain-prompt
+test, use a separate OS user or test keychain, not merely a different config
+path.
 
 Answer the prompts, and when asked for a storage backend, choose **sia**.
 You'll then be asked for an indexd URL (press Enter to accept the
@@ -47,11 +44,12 @@ brand new one:
 Your new recovery phrase — this is your master key, save it securely, it
 is never stored by obsidianlog:
 
-    session faculty expire wife biology cactus speed tragic beauty traffic dry story
+    <a newly generated recovery phrase appears here>
 ```
 
-Save that phrase somewhere safe. It's the master key for your Sia
-account, and ObsidianLog never stores it for you.
+Save the newly generated phrase somewhere safe. It's the master key for your
+Sia account, and ObsidianLog never stores it for you. Never use a recovery
+phrase shown in documentation or shared by someone else.
 
 ## 3. Approve the connection in your browser
 
@@ -77,7 +75,13 @@ step. Please note how many you actually saw.
 ## 4. Start the server and send a log
 
 ```sh
-./obsidianlog serve --config sia-test/config.toml &
+./obsidianlog serve --config sia-test/config.toml
+```
+
+Leave that terminal running. Open a second terminal in the same extracted
+release folder, then send the test log:
+
+```sh
 curl -s -X POST http://localhost:7080/ingest \
   -H 'content-type: application/json' \
   -d '[{"timestamp":"2026-09-18T10:00:00Z","service":"tutorial","level":"info","msg":"hello from Sia"}]'
@@ -98,10 +102,12 @@ much faster.
 ./obsidianlog verify --config sia-test/config.toml
 ```
 
-Same as the local backend tutorial, except this data actually lives on
-the Sia network now, encrypted under a key only you hold.
+`query` decrypts and prints the log line back, and `verify` walks the hash
+chain and confirms nothing archived has been tampered with, exactly like a
+local backend install. The difference here is that this data actually
+lives on the Sia network now, encrypted under a key only you hold.
 
-## Tell me how it went
+## Tell us how it went
 
 Please open a
 [feedback report](https://github.com/emmaglorypraise/ObsidianLog/issues/new?template=feedback.yml)
@@ -113,4 +119,11 @@ a spot for them in the form.
 
 Try [Testing as a Returning User](/tutorials/returning-user) to see how
 ObsidianLog behaves when you re-run `init` later, instead of only on a
-fresh install.
+fresh install, or [Testing with Vector](/tutorials/vector-integration) to
+see a real log shipper feed it instead of a single `curl` request.
+
+Once you're done testing and want a real, ongoing setup rather than a
+scratch folder, see the [Quickstart](/get-started/quickstart).
+
+When you finish the tutorial, return to the terminal running `serve` and
+press `Ctrl-C` to stop it.

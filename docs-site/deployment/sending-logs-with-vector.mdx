@@ -3,8 +3,9 @@ title: "Sending Logs with Vector"
 description: "Point Vector's HTTP sink at obsidianlog-ingest to ship real logs."
 ---
 
-`obsidianlog-ingest` is Vector-compatible: Vector reads your logs, then its
-HTTP sink `POST`s them (as a JSON array) to the ObsidianLog ingest server.
+ObsidianLog's ingest endpoint is Vector-compatible: Vector reads your logs,
+then its HTTP sink `POST`s them (as a JSON array) to the ObsidianLog ingest
+server.
 ObsidianLog uses write-then-ack. It returns `200` only after a durable,
 encrypted, hash-chained write, and `5xx` on failure, so Vector owns
 buffering, backpressure, and retry. A `5xx` is simply retried.
@@ -50,8 +51,13 @@ exists too).
 ## Running it
 
 ```sh
-obsidianlog-ingest              # start the server (defaults to 127.0.0.1:7080)
-vector --config vector.toml     # start shipping
+# Run this after `obsidianlog init`. Use ./obsidianlog if you are running
+# directly from an extracted release archive rather than installing it on PATH.
+obsidianlog serve
+vector --config vector.toml
 ```
 
 See [obsidianlog serve](/cli/serve) for the endpoints Vector's sink talks to.
+The standalone `obsidianlog-ingest` binary is intended for advanced deployments
+that supply `OBSIDIANLOG_ENCRYPTION_KEY` or `OBSIDIANLOG_ENCRYPTION_KEY_FILE`
+explicitly. See [Building From Source](/get-started/building-from-source).
