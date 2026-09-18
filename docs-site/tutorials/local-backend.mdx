@@ -1,0 +1,111 @@
+---
+title: "Testing the Local Backend"
+description: "The first thing to try: init, serve, ingest, query, verify against the local filesystem, no Sia account needed."
+---
+
+This is the tutorial to start with if you're new to ObsidianLog. It uses
+the local backend, so there's nothing to set up beyond downloading a
+binary. If it works here, you know the core pipeline (encrypt, compress,
+hash-chain, query, verify) is solid before you touch Sia at all.
+
+Takes about five minutes.
+
+## 1. Get the binary
+
+Grab the archive for your platform from the
+[Releases page](https://github.com/emmaglorypraise/ObsidianLog/releases).
+For example, on Apple Silicon:
+
+```sh
+curl -LO https://github.com/emmaglorypraise/ObsidianLog/releases/download/v0.2.0/obsidianlog-v0.2.0-aarch64-apple-darwin.tar.gz
+tar -xzf obsidianlog-v0.2.0-aarch64-apple-darwin.tar.gz
+chmod +x obsidianlog obsidianlog-ingest
+```
+
+Swap in the filename for your actual platform and the version you
+downloaded. On macOS, Gatekeeper may flag the binary as unsigned the
+first time you run it: right-click `obsidianlog` in Finder and choose
+Open once, or run `xattr -d com.apple.quarantine obsidianlog`.
+
+## 2. Run init
+
+```sh
+./obsidianlog init
+```
+
+You'll be asked a handful of questions: storage bucket name, which
+backend (choose **local**), where to store data on disk, the ingest
+server's bind address, and the chunk time window. The defaults are fine
+for testing, just press Enter through each one.
+
+On macOS, you should see **at most one** keychain authorization prompt
+during this step. That's the main thing worth confirming here, so
+please note how many prompts you actually saw when you report back.
+Click **Always Allow** rather than just Allow, so later commands don't
+ask again.
+
+<Frame caption="macOS keychain prompt during a fresh init">
+</Frame>
+
+When it finishes, you'll see something like:
+
+```text
+obsidianlog initialized.
+  config:      /Users/you/.config/obsidianlog/config.toml
+  credentials: the OS keychain
+```
+
+## 3. Start the server
+
+```sh
+./obsidianlog serve
+```
+
+This blocks and waits for log batches. Leave it running and open a new
+terminal for the rest of this tutorial.
+
+## 4. Send it a test log
+
+```sh
+curl -s -X POST http://localhost:7080/ingest \
+  -H 'content-type: application/json' \
+  -d '[{"timestamp":"2026-09-18T10:00:00Z","service":"tutorial","level":"info","msg":"hello from the local backend"}]'
+```
+
+A successful ingest returns an empty `200 OK`, so no output here is
+actually the expected result, not a sign anything's wrong. If you want
+to double check, add `-w "%{http_code}\n"` to the `curl` command and
+look for `200`.
+
+## 5. Query it back
+
+```sh
+./obsidianlog query --service tutorial --format human
+```
+
+You should see the log line you just sent, decrypted and printed back
+to you.
+
+## 6. Verify the chain
+
+```sh
+./obsidianlog verify
+```
+
+This walks the hash chain and confirms nothing archived has been
+tampered with. It should print `OK` for the `tutorial` service.
+
+## Tell me how it went
+
+That's the whole loop. Whether it went smoothly or you got stuck
+somewhere, I'd genuinely like to know. Please open a
+[feedback report](https://github.com/emmaglorypraise/ObsidianLog/issues/new?template=feedback.yml)
+and if you happened to notice roughly how long `init` took, or how long
+it took between sending the log and being able to query it back, those
+numbers are useful too (there's a spot for them in the form, no need to
+go back and measure on purpose).
+
+## What's next
+
+If this worked, try [Testing the Sia Backend](/tutorials/sia-backend) to
+see it archive to the real Sia network instead of your local disk.

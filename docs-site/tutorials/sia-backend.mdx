@@ -1,0 +1,115 @@
+---
+title: "Testing the Sia Backend"
+description: "Connect ObsidianLog to the real Sia network and archive, query, and verify against it."
+---
+
+This walks through connecting ObsidianLog to Sia for real, using the
+hosted, zero-setup indexer at [sia.storage](https://sia.storage). You
+don't need to run any Sia infrastructure yourself.
+
+If you haven't tried [Testing the Local Backend](/tutorials/local-backend)
+yet, do that one first. It's faster to debug a problem there than here,
+since there's no network or account involved.
+
+Takes about ten minutes, most of it waiting on a one-time Sia write.
+
+## 1. Get the binary
+
+Same as the local backend tutorial: grab the archive for your platform
+from the
+[Releases page](https://github.com/emmaglorypraise/ObsidianLog/releases)
+and extract it. The `sia` backend is already built into the official
+release binary, so there's nothing extra to install or compile.
+
+```sh
+curl -LO https://github.com/emmaglorypraise/ObsidianLog/releases/download/v0.2.0/obsidianlog-v0.2.0-aarch64-apple-darwin.tar.gz
+tar -xzf obsidianlog-v0.2.0-aarch64-apple-darwin.tar.gz
+chmod +x obsidianlog obsidianlog-ingest
+```
+
+Swap in your actual platform's filename.
+
+## 2. Run init and choose Sia
+
+```sh
+./obsidianlog init --config sia-test/config.toml
+```
+
+Using a separate `--config` path like this keeps this test independent
+from anything you set up in the local backend tutorial.
+
+Answer the prompts, and when asked for a storage backend, choose **sia**.
+You'll then be asked for an indexd URL (press Enter to accept the
+default, `sia.storage`) and a recovery phrase. Type `seed` to generate a
+brand new one:
+
+```text
+Your new recovery phrase — this is your master key, save it securely, it
+is never stored by obsidianlog:
+
+    session faculty expire wife biology cactus speed tragic beauty traffic dry story
+```
+
+Save that phrase somewhere safe. It's the master key for your Sia
+account, and ObsidianLog never stores it for you.
+
+## 3. Approve the connection in your browser
+
+```text
+Open this URL and approve the app in your Sia account:
+
+    https://sia.storage/auth/connect/...
+
+Waiting for approval (this blocks until you approve)...
+```
+
+Open that URL and approve. `init` blocks until you do.
+
+<Frame caption="The sia.storage approval page">
+</Frame>
+
+Once approved, `init` finishes the remaining prompts (bind address,
+chunk window) and writes your config. On macOS, this whole flow should
+cost **at most one** keychain prompt, separate from the browser approval
+step. Please note how many you actually saw.
+
+## 4. Start the server and send a log
+
+```sh
+./obsidianlog serve --config sia-test/config.toml &
+curl -s -X POST http://localhost:7080/ingest \
+  -H 'content-type: application/json' \
+  -d '[{"timestamp":"2026-09-18T10:00:00Z","service":"tutorial","level":"info","msg":"hello from Sia"}]'
+```
+
+<Note>
+The **first** write to a brand new Sia account can take several minutes,
+not seconds. It's forming a real storage contract behind the scenes, and
+a plain `curl` gives you no progress indicator while that happens. If it
+seems to hang, that's expected. Just let it run. Subsequent writes are
+much faster.
+</Note>
+
+## 5. Query and verify
+
+```sh
+./obsidianlog query --config sia-test/config.toml --service tutorial --format human
+./obsidianlog verify --config sia-test/config.toml
+```
+
+Same as the local backend tutorial, except this data actually lives on
+the Sia network now, encrypted under a key only you hold.
+
+## Tell me how it went
+
+Please open a
+[feedback report](https://github.com/emmaglorypraise/ObsidianLog/issues/new?template=feedback.yml)
+either way. If you noticed roughly how long `init` took, or how long the
+first write took before `curl` returned, those numbers help a lot. There's
+a spot for them in the form.
+
+## What's next
+
+Try [Testing as a Returning User](/tutorials/returning-user) to see how
+ObsidianLog behaves when you re-run `init` later, instead of only on a
+fresh install.
