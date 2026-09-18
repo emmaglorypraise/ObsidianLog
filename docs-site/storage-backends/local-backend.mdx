@@ -1,12 +1,12 @@
 ---
 title: "Local Backend"
-description: "The default, Sia-free backend — a filesystem store for development, testing, and offline use."
+description: "The default, Sia-free backend: a filesystem store for development, testing, and offline use."
 ---
 
 `LocalBackend` is the default: no Sia node, no wallet, nothing beyond disk.
 `obsidianlog init` picks it unless you explicitly choose the Sia backend, and
-every default build/test in this project runs against it — the project's
-mock-first invariant.
+every default build/test in this project runs against it, matching the
+project's mock-first invariant.
 
 ## On-disk layout
 
@@ -21,7 +21,7 @@ regardless of backend:
 ```
 
 `sequence` (unique and monotonic per service) is part of the path, not just
-`window` — a window can legitimately receive many chunks over its lifetime
+`window`, since a window can legitimately receive many chunks over its lifetime
 (one per batch that touches it), so `(service, window)` alone isn't a unique
 storage location.
 

@@ -11,37 +11,38 @@ existing config/key and reuses them unless you pass `--force`.
 
 | Flag | Description |
 | --- | --- |
-| `--non-interactive` | Accept every default, no prompts — always picks the local backend. Useful for scripting (CI, Docker). |
-| `--force` | Overwrite an existing configuration. Rotates the encryption key, which makes previously archived data undecryptable with the new key — asks for confirmation unless you're also non-interactive. |
+| `--non-interactive` | Accept every default, no prompts. Always picks the local backend. Useful for scripting (CI, Docker). |
+| `--force` | Overwrite an existing configuration. Rotates the encryption key, which makes previously archived data undecryptable with the new key, and asks for confirmation unless you're also non-interactive. |
 
 Plus the global [`--config <FILE>`](/cli/overview#global-flags).
 
 ## What it asks (interactively)
 
-1. **Storage bucket / namespace** — default `obsidianlog`.
-2. **Storage backend** — `local` (no Sia node needed) or `sia`.
-3. If `local`: **local storage directory** — default `./obsidianlog-data`.
+1. **Storage bucket / namespace**: default `obsidianlog`.
+2. **Storage backend**: `local` (no Sia node needed) or `sia`.
+3. If `local`: **local storage directory**, default `./obsidianlog-data`.
    If `sia`: an **indexer URL**, defaulting to
    [`https://sia.storage`](https://sia.storage) (the hosted, zero-setup
    option), then a **recovery phrase** prompt (type `seed` to generate a new
-   one) to complete onboarding inline — no separate command needed. See
+   one) to complete onboarding inline, no separate command needed. See
    [Choosing a Backend](/storage-backends/choosing-a-backend) for what this
    actually connects to and when to use a different URL instead.
-4. **Ingest server bind address** — default `127.0.0.1:7080`.
-5. **Chunk time window (seconds)** — default `3600`.
+4. **Ingest server bind address**: default `127.0.0.1:7080`.
+5. **Chunk time window (seconds)**: default `3600`.
 
 ## Where credentials live
 
 The encryption key and, if you chose Sia, the indexd app key are stored
-together as one bundled credential — Keychain on macOS, Credential Manager
-on Windows, Secret Service on Linux — falling back to a `0600` secrets file
+together as one bundled credential (Keychain on macOS, Credential Manager
+on Windows, Secret Service on Linux), falling back to a `0600` secrets file
 (`~/.obsidianlog/`) if the keychain isn't reachable. Never transmitted or
 committed anywhere.
 
-A fresh setup means exactly one keychain authorization prompt, whether you
-choose the local or the Sia backend. On macOS this uses a direct,
-"create only" keychain write rather than the usual check-then-write pattern
-most tools use — see [ADR-0015](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0015-bundled-credential-single-prompt-setup.md)
+A fresh setup means at most one keychain authorization prompt, whether you
+choose the local or the Sia backend (macOS may skip it entirely once it
+already trusts the binary). On macOS this uses a direct, "create only"
+keychain write rather than the usual check-then-write pattern most tools
+use. See [ADR-0015](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0015-bundled-credential-single-prompt-setup.md)
 for why that matters.
 
 A config file from before this bundled format (obsidianlog 0.1.x) isn't

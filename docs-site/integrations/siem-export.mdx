@@ -1,9 +1,9 @@
 ---
 title: "SIEM Export"
-description: "Forward archived logs into a SIEM using obsidianlog query --format raw — NDJSON, no custom parsing needed."
+description: "Forward archived logs into a SIEM using obsidianlog query --format raw. NDJSON, no custom parsing needed."
 ---
 
-`obsidianlog query --format raw` emits NDJSON — one JSON object per line,
+`obsidianlog query --format raw` emits NDJSON: one JSON object per line,
 the original ingested event, unmodified. Mainstream SIEM tooling ingests
 this natively:
 
@@ -11,12 +11,12 @@ this natively:
 obsidianlog query --format raw --from 24h > /var/log/obsidianlog/archive.ndjson
 ```
 
-Run this on a schedule (cron, a systemd timer) for ongoing export — a
+Run this on a schedule (cron, a systemd timer) for ongoing export. A
 one-off `query` run is a snapshot of what matched at that moment, not a live
 tail of new archives as they land.
 
 <Note>
-This is an example, not a shipped integration — see the config files' own
+This is an example, not a shipped integration. See the config files' own
 comments for what to change before using them for real (endpoints, index
 names, credentials).
 </Note>
@@ -24,7 +24,7 @@ names, credentials).
 ## Filebeat → Elasticsearch/Logstash
 
 A `filestream` input tails the exported file and parses each line as
-NDJSON — no custom Filebeat processors needed, since the shape is already
+NDJSON. No custom Filebeat processors needed, since the shape is already
 flat JSON per line:
 
 ```yaml
@@ -68,9 +68,9 @@ restart the forwarder/instance.
 ## Why this needs no custom integration code
 
 `--format raw`'s output is exactly the log event as it was originally
-ingested — SIEM tools that already parse JSON logs (most of them) need
+ingested. SIEM tools that already parse JSON logs (most of them) need
 nothing ObsidianLog-specific to consume it. The interesting property here
-isn't the export format, which is just JSON — it's that what you're
+isn't the export format, which is just JSON. It's that what you're
 exporting was tamper-evident and hash-chained the whole time it was
 archived ([`obsidianlog verify`](/cli/verify)), unlike logs that only ever
 lived in a mutable hot-tier index.

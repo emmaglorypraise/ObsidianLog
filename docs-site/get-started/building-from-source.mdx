@@ -15,7 +15,7 @@ cargo build --release
 
 `obsidianlog-ingest` is a standalone binary you can run without the CLI.
 Unlike `obsidianlog serve` (which manages the key for you), the standalone
-binary never reads its encryption key from the config file — it refuses to
+binary never reads its encryption key from the config file. It refuses to
 start until you pass one via `OBSIDIANLOG_ENCRYPTION_KEY` (a 64-character hex
 string) or `OBSIDIANLOG_ENCRYPTION_KEY_FILE` (a path to a file containing
 that string, the convention for a mounted Docker/Kubernetes secret):
@@ -24,17 +24,18 @@ that string, the convention for a mounted Docker/Kubernetes secret):
 OBSIDIANLOG_ENCRYPTION_KEY=$(openssl rand -hex 32) ./target/release/obsidianlog-ingest
 ```
 
-The `obsidianlog` CLI's `init`/`serve` manage this key for you instead — see
+The `obsidianlog` CLI's `init`/`serve` manage this key for you instead. See
 [obsidianlog init](/cli/init) and [obsidianlog serve](/cli/serve).
 
 ## Building with the Sia backend
 
 The official prebuilt release binaries already ship **with** the `sia` Cargo
-feature — Sia is this project's Foundation-sponsored storage path, so it's
-built into `obsidianlog` by default; `init` still defaults to the local
+feature. Sia is this project's Foundation-sponsored storage path, so it's
+built into `obsidianlog` by default. `init` still defaults to the local
 backend unless you choose Sia. Building it yourself from source needs the
 feature passed explicitly, since default builds/tests stay Sia-free (it
-depends on a pre-1.0 SDK — see [ADR-0006](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0006-sia-integration.md)):
+depends on a pre-1.0 SDK, see
+[ADR-0006](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0006-sia-integration.md)):
 
 ```sh
 cargo install --path crates/obsidianlog-cli --features sia
