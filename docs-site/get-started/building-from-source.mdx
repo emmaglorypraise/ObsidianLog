@@ -3,12 +3,20 @@ title: "Building From Source"
 description: "Build ObsidianLog from source, including the Sia backend."
 ---
 
-Not yet published to crates.io:
+ObsidianLog isn't published to crates.io yet, so building from source
+means cloning the repository directly:
 
 ```sh
 git clone https://github.com/emmaglorypraise/ObsidianLog
 cd ObsidianLog
 cargo build --release
+```
+
+That builds the default, Sia-free workspace. To build the CLI with the Sia
+backend too, use:
+
+```sh
+cargo build -p obsidianlog-cli --release --features sia
 ```
 
 ## Running the standalone ingest server directly
@@ -33,13 +41,14 @@ The official prebuilt release binaries already ship **with** the `sia` Cargo
 feature. Sia is this project's Foundation-sponsored storage path, so it's
 built into `obsidianlog` by default. `init` still defaults to the local
 backend unless you choose Sia. Building it yourself from source needs the
-feature passed explicitly, since default builds/tests stay Sia-free (it
-depends on a pre-1.0 SDK, see
-[ADR-0006](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0006-sia-integration.md)):
+feature passed explicitly. The Sia build command above does that. Default
+builds/tests stay Sia-free because the integration depends on a pre-1.0 SDK (see
+[ADR-0006](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0006-sia-integration.md)).
 
-```sh
-cargo install --path crates/obsidianlog-cli --features sia
-```
+The command above writes the Sia-capable binary to
+`target/release/obsidianlog`. Use `cargo install --path
+crates/obsidianlog-cli --features sia` instead only if you specifically want
+Cargo to install it into your user-wide Cargo bin directory.
 
 Without this feature, `serve`/`query`/`verify` fail with a clear error the
 moment a config points at a Sia indexer, rather than silently falling back

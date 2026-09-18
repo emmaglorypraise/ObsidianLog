@@ -6,9 +6,11 @@ description: "Point ObsidianLog at your own self-hosted indexd, or a third party
 The Sia backend isn't limited to [`sia.storage`](/storage-backends/hosted-sia-storage).
 At the same `obsidianlog init` prompt, entering a different indexer URL
 points ObsidianLog at your own self-hosted `indexd`, or a third party's,
-instead. This is a configuration choice, not a code fork: the indexer URL
-and app key are just config values (`SiaConfig { indexer_url, bucket,
-app_key }`).
+instead. This is a configuration choice, not a code fork. The indexer URL
+lives in `config.toml`, and the app key `init` receives from onboarding
+lives in the credential bundle alongside the encryption key, not as a
+plaintext config value. Together they form the `SiaConfig { indexer_url,
+bucket, app_key }` the backend actually connects with at runtime.
 
 ## Who this is for
 

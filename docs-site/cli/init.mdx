@@ -3,16 +3,17 @@ title: "obsidianlog init"
 description: "Interactive setup wizard: generate keys, configure a storage backend, write config.toml."
 ---
 
-Generates the archive's AES-256 encryption key, walks you through choosing a
-storage backend, and writes `config.toml`. Idempotent: re-running detects an
-existing config/key and reuses them unless you pass `--force`.
+This generates the archive's AES-256 encryption key, walks you through
+choosing a storage backend, and writes `config.toml`. It's idempotent, so
+re-running it detects an existing config and key and reuses them unless
+you pass `--force`.
 
 ## Flags
 
 | Flag | Description |
 | --- | --- |
-| `--non-interactive` | Accept every default, no prompts. Always picks the local backend. Useful for scripting (CI, Docker). |
-| `--force` | Overwrite an existing configuration. Rotates the encryption key, which makes previously archived data undecryptable with the new key, and asks for confirmation unless you're also non-interactive. |
+| `--non-interactive` | Accepts every default, with no prompts. It always picks the local backend. Useful for scripting (CI, Docker). |
+| `--force` | Overwrites an existing configuration. This rotates the encryption key, which makes previously archived data undecryptable with the new key, so it asks for confirmation unless you're also non-interactive. |
 
 Plus the global [`--config <FILE>`](/cli/overview#global-flags).
 
@@ -35,8 +36,8 @@ Plus the global [`--config <FILE>`](/cli/overview#global-flags).
 The encryption key and, if you chose Sia, the indexd app key are stored
 together as one bundled credential (Keychain on macOS, Credential Manager
 on Windows, Secret Service on Linux), falling back to a `0600` secrets file
-(`~/.obsidianlog/`) if the keychain isn't reachable. Never transmitted or
-committed anywhere.
+(`~/.obsidianlog/`) if the keychain isn't reachable. It is never
+transmitted or committed anywhere.
 
 A fresh setup means at most one keychain authorization prompt, whether you
 choose the local or the Sia backend (macOS may skip it entirely once it

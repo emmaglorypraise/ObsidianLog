@@ -1,0 +1,136 @@
+---
+title: "Testing with Vector"
+description: "Ship real logs through Vector into ObsidianLog, not just a curl smoke test."
+---
+
+The other tutorials prove ObsidianLog's own pipeline works using a single
+`curl` request. This one proves the other half: that a real log shipper,
+[Vector](https://vector.dev), can actually feed it. This is what shipping
+logs into ObsidianLog from a real application looks like day to day.
+
+Takes about ten minutes, most of it installing Vector.
+
+## 1. Get the binary
+
+If you haven't already, download and extract the release binary for your
+system. [Installing a release binary](/get-started/quickstart#installing-a-release-binary)
+in the Quickstart has the full walkthrough, or the [FAQ](/get-started/faq)
+if you're not sure which file to grab.
+
+## 2. Install Vector
+
+Vector isn't part of ObsidianLog, it's a separate, independently
+maintained log shipper. Follow
+[Vector's own installation instructions](https://vector.dev/docs/setup/installation/)
+for your platform, then confirm it's on your `PATH`:
+
+```sh
+vector --version
+```
+
+## 3. Set up ObsidianLog
+
+```sh
+mkdir vector-test && cd vector-test
+../obsidianlog init --config config.toml
+```
+
+Choose the local backend for this tutorial, it keeps things simple since
+the point here is proving Vector's wiring, not re-testing Sia. Then start
+the server:
+
+```sh
+../obsidianlog serve --config config.toml
+```
+
+If that fails with an address-already-in-use error, an `obsidianlog serve`
+from an earlier tutorial is probably still running on port 7080, stop that
+one first (or add `--bind 127.0.0.1:7081` here and update the URL in the
+Vector config below to match).
+
+Leave it running and open a new terminal for the rest of this tutorial.
+
+## 4. Create something for Vector to tail
+
+Vector needs a real file to watch. In your `vector-test` folder:
+
+```sh
+echo '{"timestamp":"2026-09-19T10:00:00Z","service":"vector-tutorial","level":"info","msg":"hello from vector"}' >> app.log
+```
+
+## 5. Write a Vector config
+
+Save this as `vector.toml` in the same folder:
+
+```toml
+[sources.app_logs]
+type = "file"
+include = ["app.log"]
+
+# The file source reads raw lines, so this transform parses each one as
+# JSON, letting ObsidianLog index the service/level/timestamp fields.
+[transforms.structure]
+type = "remap"
+inputs = ["app_logs"]
+source = '''
+  . = object!(parse_json(.message) ?? { "message": .message })
+'''
+
+[sinks.obsidianlog]
+type = "http"
+inputs = ["structure"]
+uri = "http://localhost:7080/ingest"
+method = "post"
+encoding.codec = "json"
+batch.timeout_secs = 1
+```
+
+This mirrors the full example at
+[`crates/obsidianlog-ingest/examples/vector.toml`](https://github.com/emmaglorypraise/ObsidianLog/blob/main/crates/obsidianlog-ingest/examples/vector.toml)
+in the repo, trimmed down for this tutorial.
+
+## 6. Run Vector
+
+```sh
+vector --config vector.toml
+```
+
+Vector picks up the line already in `app.log`, parses it, and posts it to
+ObsidianLog within a second or two (`batch.timeout_secs = 1` above keeps
+this quick for the tutorial, a real deployment would usually use a longer
+window). Leave Vector running, then open a third terminal, `cd` into the
+same `vector-test` folder, and append a second line to prove Vector is
+actually watching the file, not just reading it once:
+
+```sh
+echo '{"timestamp":"2026-09-19T10:05:00Z","service":"vector-tutorial","level":"warn","msg":"a second line, sent live"}' >> app.log
+```
+
+## 7. Query and verify
+
+Back in that same `vector-test` folder:
+
+```sh
+../obsidianlog query --config config.toml --service vector-tutorial --format human
+../obsidianlog verify --config config.toml
+```
+
+Both log lines should come back, in order, decrypted, exactly as Vector
+sent them.
+
+## Tell us how it went
+
+Please open a
+[feedback report](https://github.com/emmaglorypraise/ObsidianLog/issues/new?template=feedback.yml)
+either way, especially if Vector's config or install process didn't match
+what's described here. Vector is maintained independently of ObsidianLog,
+so its exact install steps can change without any of us noticing right away.
+
+## What's next
+
+Once you're done testing, [Sending Logs with Vector](/deployment/sending-logs-with-vector)
+covers the full config reference for wiring this into a real, ongoing
+deployment rather than a scratch test folder.
+
+When you finish the tutorial, stop Vector and return to the terminal running
+`obsidianlog serve` and press `Ctrl-C`.

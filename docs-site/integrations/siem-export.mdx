@@ -24,8 +24,8 @@ names, credentials).
 ## Filebeat → Elasticsearch/Logstash
 
 A `filestream` input tails the exported file and parses each line as
-NDJSON. No custom Filebeat processors needed, since the shape is already
-flat JSON per line:
+NDJSON. No custom Filebeat processors are needed, since the shape is
+already flat JSON per line:
 
 ```yaml
 filebeat.inputs:

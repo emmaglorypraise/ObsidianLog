@@ -12,20 +12,14 @@ Takes about five minutes.
 
 ## 1. Get the binary
 
-Grab the archive for your platform from the
-[Releases page](https://github.com/emmaglorypraise/ObsidianLog/releases).
-For example, on Apple Silicon:
+If you haven't already, download and extract the release binary for your
+system. [Installing a release binary](/get-started/quickstart#installing-a-release-binary)
+in the Quickstart has the full walkthrough for macOS, Windows, and Linux.
+Not sure which file to grab in the first place? See the
+[FAQ](/get-started/faq).
 
-```sh
-curl -LO https://github.com/emmaglorypraise/ObsidianLog/releases/download/v0.2.0/obsidianlog-v0.2.0-aarch64-apple-darwin.tar.gz
-tar -xzf obsidianlog-v0.2.0-aarch64-apple-darwin.tar.gz
-chmod +x obsidianlog obsidianlog-ingest
-```
-
-Swap in the filename for your actual platform and the version you
-downloaded. On macOS, Gatekeeper may flag the binary as unsigned the
-first time you run it: right-click `obsidianlog` in Finder and choose
-Open once, or run `xattr -d com.apple.quarantine obsidianlog`.
+The rest of this tutorial writes commands as `./obsidianlog` (macOS/Linux).
+On Windows, that's `.\obsidianlog.exe` instead.
 
 ## 2. Run init
 
@@ -96,10 +90,10 @@ to you.
 This walks the hash chain and confirms nothing archived has been
 tampered with. It should print `OK` for the `tutorial` service.
 
-## Tell me how it went
+## Tell us how it went
 
 That's the whole loop. Whether it went smoothly or you got stuck
-somewhere, I'd genuinely like to know. Please open a
+somewhere, we'd genuinely like to know. Please open a
 [feedback report](https://github.com/emmaglorypraise/ObsidianLog/issues/new?template=feedback.yml)
 and if you happened to notice roughly how long `init` took, or how long
 it took between sending the log and being able to query it back, those
@@ -109,4 +103,12 @@ go back and measure on purpose).
 ## What's next
 
 If this worked, try [Testing the Sia Backend](/tutorials/sia-backend) to
-see it archive to the real Sia network instead of your local disk.
+see it archive to the real Sia network instead of your local disk, or
+[Testing with Vector](/tutorials/vector-integration) to see a real log
+shipper feed it instead of a single `curl` request.
+
+Once you're done testing and want a real, ongoing setup rather than a
+scratch folder, see the [Quickstart](/get-started/quickstart).
+
+When you finish the tutorial, return to the terminal running `serve` and
+press `Ctrl-C` to stop it.

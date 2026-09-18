@@ -1,0 +1,53 @@
+---
+title: "FAQ"
+description: "Common questions, starting with which release file to download."
+---
+
+## Which release file should I download?
+
+Go to the [Releases page](https://github.com/emmaglorypraise/ObsidianLog/releases)
+and make sure you're on the **latest** release (it's labeled "Latest" at
+the top of the list). Older releases stay listed below it, so it's easy to
+end up on the wrong one if you land on this page from a search engine or an
+old link.
+
+Once you're on the right release, scroll down to the **Assets** section.
+That's where the actual downloadable files are. Everything above it on the
+page is just the changelog for that release, not something you need to
+read to install it.
+
+Under Assets, pick the file matching your system:
+
+| Your system | File to download |
+| --- | --- |
+| macOS, Apple Silicon (M1 or newer) | `obsidianlog-<version>-aarch64-apple-darwin.tar.gz` |
+| macOS, Intel | `obsidianlog-<version>-x86_64-apple-darwin.tar.gz` |
+| Windows | `obsidianlog-<version>-x86_64-pc-windows-msvc.zip` |
+| Linux, most machines (x86_64) | `obsidianlog-<version>-x86_64-unknown-linux-musl.tar.gz` |
+| Linux, ARM (Raspberry Pi, AWS Graviton, and similar) | `obsidianlog-<version>-aarch64-unknown-linux-musl.tar.gz` |
+
+`<version>` is the release number, for example `v0.2.0`.
+
+## How do I check my machine's architecture?
+
+On Linux, open a terminal and run:
+
+```sh
+uname -m
+```
+
+`x86_64` means choose the x86_64 Linux archive. `aarch64` or `arm64` means
+choose the aarch64 Linux archive. The current Windows release is for x86_64
+Windows only. Windows on ARM is not distributed yet.
+
+<Note>
+Not sure which Mac you have? Click the Apple menu → **About This Mac**.
+If it says "Chip: Apple M1/M2/M3/M4..." you're Apple Silicon. If it says
+"Processor: Intel...", you're Intel.
+</Note>
+
+Each archive contains two binaries directly: `obsidianlog` (the CLI) and
+`obsidianlog-ingest` (the standalone ingest server). There's no installer
+and no dependencies to install separately. See
+[Installing a release binary](/get-started/quickstart#installing-a-release-binary)
+for what to do once you've downloaded the right file.

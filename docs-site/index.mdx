@@ -3,40 +3,95 @@ title: "Introduction"
 description: "Long-term, tamper-evident operational log archival on Sia."
 ---
 
-**ObsidianLog** sits alongside your hot observability stack (Datadog, Grafana, ELK) as a **cold-tier destination**. Logs flow into your active tools for monitoring, then archive to Sia: encrypted before they leave your infrastructure, compressed, hash-chained for tamper-evidence, and queryable at a fraction of the cost. You own the keys and the contracts, entirely.
+Most teams can't afford to keep their logs around for long. Tools like
+Datadog and Elastic charge by the gigabyte and by the month, so logs get
+deleted after a few weeks just to control cost, even though audits,
+incident investigations, and compliance rules often call for keeping them
+much longer.
 
-Client-side encrypted, zstd-compressed, hash-chained, and queryable. The storage pipeline, HTTP ingest server, and `obsidianlog` CLI (`init`, `serve`, `query`, `verify`) all work and are tested end to end.
+**ObsidianLog** archives your logs somewhere cheap and permanent, without
+handing them to another company. Everything is encrypted before it ever
+leaves your machine, so only you can read it, and every entry is
+cryptographically chained together, so you can prove later that nothing
+was quietly changed or deleted. Your day-to-day monitoring tool stays
+exactly as it is. ObsidianLog becomes the place logs go once you're done
+actively watching them, kept safe and provably intact for as long as you
+need them.
 
-## Start here
+## Who it's for
+
+| Team | Why ObsidianLog fits |
+| --- | --- |
+| Solo developers and indie hackers | You probably aren't archiving logs anywhere today. This gives you real, tamper-evident archival for close to nothing. |
+| Teams with audit or compliance needs | You need to prove logs weren't altered after the fact, not just store them somewhere. That's what the hash chain is for. |
+| Sia ecosystem developers | You're already using Sia. ObsidianLog is a natural fit for your existing setup. |
+| Privacy-first and Web3-native teams | Owning your own data instead of trusting a vendor with it isn't just a preference, it's the whole point. |
+| Open source maintainers | A cheap, durable place to keep CI logs, release history, and telemetry around for good, not just a few weeks. |
+
+## How to use it
 
 <CardGroup cols={2}>
-  <Card title="Quickstart" href="/get-started/quickstart">
-    Install a release binary (or build from source) and run your first init → serve → query → verify loop.
+  <Card title="Release binary" href="/get-started/quickstart">
+    Recommended for most people. Download, extract, run. No Rust toolchain needed.
   </Card>
-  <Card title="Try it live, no install" href="https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/demo.yml">
-    Fork the repo and run the GitHub Actions demo: the full pipeline, in your browser, zero setup.
+  <Card title="Build from source" href="/get-started/building-from-source">
+    For the latest code, or if you want to build with Cargo yourself.
+  </Card>
+  <Card title="Docker" href="/deployment/docker-compose-quickstart">
+    Run it in a container, a Compose file is included.
+  </Card>
+  <Card title="cargo install (coming soon)">
+    Not published to crates.io yet. Use the release binary or build from source for now.
   </Card>
 </CardGroup>
 
-## Browse by topic
+**No install at all?** Fork the repo and run the
+[GitHub Actions demo](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/demo.yml)
+to watch the whole pipeline run in your browser, zero setup.
+
+<Note>
+ObsidianLog is in active beta ahead of its public launch. If you try it,
+we'd genuinely like to know how it went, good or bad. Start with the
+[Tutorials](/tutorials/local-backend), or jump straight to
+[giving feedback](https://github.com/emmaglorypraise/ObsidianLog/issues/new?template=feedback.yml).
+</Note>
+
+## Get involved
 
 <CardGroup cols={2}>
+  <Card title="Suggest a feature" href="https://github.com/emmaglorypraise/ObsidianLog/issues/new?template=feature_request.yml">
+    Have an idea? We want to hear it.
+  </Card>
+  <Card title="Give feedback" href="https://github.com/emmaglorypraise/ObsidianLog/issues/new?template=feedback.yml">
+    Tried it? Tell us how it went, even briefly.
+  </Card>
+  <Card title="Star the repo" href="https://github.com/emmaglorypraise/ObsidianLog">
+    A real, visible way to support the project.
+  </Card>
+  <Card title="Join the discussion" href="https://github.com/emmaglorypraise/ObsidianLog/discussions">
+    Open-ended questions that aren't quite a bug or a feature request.
+  </Card>
+</CardGroup>
+
+Want to contribute code? See [Contributing](/project/contributing) for
+the development setup, PR checklist, and conventions.
+
+## Dig deeper
+
+<CardGroup cols={2}>
+  <Card title="Tutorials" href="/tutorials/local-backend">
+    Step-by-step walkthroughs: the local backend, the Sia backend, and returning to an existing install.
+  </Card>
   <Card title="Using the CLI" href="/cli/overview">
     Every `obsidianlog` command (`init`, `serve`, `query`, `verify`) with the full flag reference.
   </Card>
   <Card title="Storage Backends" href="/storage-backends/choosing-a-backend">
     Local, hosted (Sia Storage), or bring your own indexer: what each means and how to choose.
   </Card>
-  <Card title="Deployment" href="/deployment/docker-compose-quickstart">
-    Run ObsidianLog in Docker Compose, and ship real logs into it with Vector.
-  </Card>
   <Card title="Architecture & Security" href="/architecture-and-security/pipeline-architecture">
     How a log batch becomes a hash-chained, encrypted archive, and the security model behind it.
   </Card>
 </CardGroup>
 
-## Project
-
-Open source, MIT-licensed, and developed in the open. See
-[Contributing](/project/contributing) to get involved, or
-[Where to Get Help](/project/where-to-get-help) if you're stuck.
+Open source and MIT-licensed. See
+[Support & Feedback](/project/where-to-get-help) if you're stuck.

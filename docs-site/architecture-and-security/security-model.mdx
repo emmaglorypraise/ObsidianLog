@@ -17,8 +17,8 @@ user-controlled** system.
   are stored together as one bundled credential in your OS keychain (via
   the `keyring` crate on Linux/Windows, and a direct macOS Keychain API
   call on macOS), or an explicit local secrets file with `0600` permissions
-  if the keychain is genuinely unreachable. No key escrow, no key
-  transmission.
+  if the keychain is genuinely unreachable. There is no key escrow and no
+  key transmission.
 - **Authenticated encryption.** AES-256-GCM provides both confidentiality
   and ciphertext integrity. Tampered ciphertext is rejected at decryption
   time.

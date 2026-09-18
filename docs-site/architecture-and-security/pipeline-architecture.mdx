@@ -32,8 +32,32 @@ flowchart TD
   (hosted or self-hosted), behind a pluggable `StorageBackend`. A local
   filesystem backend backs development and tests with the same on-storage
   layout.
-- **Keys/secrets:** generated locally, stored in the OS keychain or a `0600`
-  file. Never transmitted, never committed.
+- **Keys/secrets:** generated locally and stored in the OS keychain or a
+  `0600` file. They are never transmitted and never committed.
+
+## Getting your logs back
+
+Sia storage, through `indexd`, is content-addressed: there's no "fetch the
+file at this path" operation the way there is on a normal filesystem or
+S3. Objects are found by hash, not by name. `obsidianlog query` still
+works like a normal query tool on top of that, using two ideas:
+
+- **Every object carries its own map.** When a chunk is uploaded, its
+  logical path (`<bucket>/chunks/<service>/<window>-<sequence>.bin`) and,
+  for chunk objects, that window's lightweight index both ride along in
+  the object's own metadata field. Metadata is cheap to read without
+  downloading the much larger encrypted body next to it.
+- **Queries narrow before they ever download a body.** `query` reads a
+  small manifest to find candidate chunks by service and time range,
+  fetches only their metadata indexes (not their bodies) to prefilter
+  against your actual query, and only downloads and decrypts the bodies
+  of chunks that survive that prefilter.
+
+Most of a query's cost is scanning small indexes, not moving encrypted
+log data around, which is what keeps `obsidianlog query` practical even
+against a large archive. See
+[ADR-0008](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0008-sia-object-overhead.md)
+for the full reasoning.
 
 ## Repository layout
 
