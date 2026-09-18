@@ -27,14 +27,14 @@ Swap in whichever version and target you actually downloaded, matching the
 exact filename from the Releases page.
 
 <Note>
-`obsidianlog` is a command-line tool, not a GUI app — run these from an
+`obsidianlog` is a command-line tool, not a GUI app. Run these from an
 already-open terminal. Double-clicking the binary (or the archive) in
 Finder/Explorer won't give you an interactive session to type into.
 </Note>
 
-`obsidianlog` (the CLI) ships **with** the `sia` Cargo feature built in — the
+`obsidianlog` (the CLI) ships **with** the `sia` Cargo feature built in. The
 Sia backend works out of the box, no source build needed. `obsidianlog init`
-still defaults to the local backend regardless; Sia only gets used if you
+still defaults to the local backend regardless. Sia only gets used if you
 choose it. `obsidianlog-ingest` (the standalone, minimal ingest-only binary)
 stays local-only by design. On macOS, Gatekeeper will flag the binary as
 unsigned the first time: right-click → Open once, or run
@@ -69,11 +69,11 @@ obsidianlog verify
 See the full [CLI reference](/cli/overview) for every command's flags.
 
 <Note>
-On macOS, `init` will prompt once for your login-keychain password — this is
-the OS asking permission for `obsidianlog` to store the credentials it just
-generated, not an ObsidianLog password. Click **Always Allow** rather than
-just Allow, so later `serve`/`query`/`verify` runs read them without
-prompting again.
+On macOS, `init` will prompt at most once for your login-keychain password.
+This is the OS asking permission for `obsidianlog` to store the credentials
+it just generated, not an ObsidianLog password. Click **Always Allow**
+rather than just Allow, so later `serve`/`query`/`verify` runs read them
+without prompting again.
 </Note>
 
 Re-running `obsidianlog init` is idempotent: it detects an existing
@@ -83,9 +83,9 @@ confirmation unless you're also non-interactive).
 
 ## What's next
 
-- [Choosing a Backend](/storage-backends/choosing-a-backend) — local disk,
+- [Choosing a Backend](/storage-backends/choosing-a-backend): local disk,
   hosted Sia Storage, or bring your own indexer.
-- [Docker Compose Quickstart](/deployment/docker-compose-quickstart) — the
+- [Docker Compose Quickstart](/deployment/docker-compose-quickstart): the
   same loop, containerized.
 - **No local install at all**: fork the repo and run the
   [GitHub Actions demo](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/demo.yml)

@@ -4,7 +4,7 @@ description: "Run the ingest server in a container against the local backend, or
 ---
 
 `docker/docker-compose.yml` runs the ingest server in a container against
-the **local backend** by default — no Sia node, no wallet, nothing beyond
+the **local backend** by default. No Sia node, no wallet, nothing beyond
 Docker itself.
 
 ## The local-backend path
@@ -37,14 +37,18 @@ docker compose -f docker/docker-compose.yml run --rm obsidianlog \
 ```
 
 The encryption key and archived data live in the `obsidianlog-data` named
-volume — they survive `docker compose restart`/`down` (without `-v`), so you
-only run step 2 once. To ship real logs instead of the `curl` smoke test,
+volume. They survive `docker compose restart`/`down` (without `-v`), so you
+only run step 2 once. The key lands in that volume rather than a host
+keychain because a bare container has no keychain daemon to talk to. The
+same file-based fallback described in
+[Security Model](/architecture-and-security/security-model) kicks in
+automatically. To ship real logs instead of the `curl` smoke test,
 see [Sending Logs with Vector](/deployment/sending-logs-with-vector).
 
 ## Optional: self-hosted `indexd`
 
 The `sia` Compose profile adds `indexd` + the PostgreSQL database it
-requires, matching indexd's own official example. It's off by default —
+requires, matching indexd's own official example. It's off by default.
 `docker compose up` alone never starts it:
 
 ```sh
@@ -62,7 +66,7 @@ docker compose -f docker/docker-compose.yml run --rm -it indexd config
 
 Then run `obsidianlog init` interactively, choose the Sia backend, and enter
 `http://localhost:9982` at the indexer URL prompt in place of the
-`https://sia.storage` default — onboarding happens inline, no separate
+`https://sia.storage` default. Onboarding happens inline, no separate
 command needed. See
 [Bring Your Own Indexer](/storage-backends/bring-your-own-indexer) for when
 this is the right choice.

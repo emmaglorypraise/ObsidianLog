@@ -4,7 +4,7 @@ description: "Traverse and validate the full hash chain for tamper-evidence."
 ---
 
 Walks each service's SHA-256 hash chain from genesis and confirms it's
-intact — proof that nothing archived has been modified, reordered, or
+intact, proof that nothing archived has been modified, reordered, or
 removed since it was written. Never decrypts log content to do this.
 
 ## Flags
@@ -18,7 +18,7 @@ Plus the global [`--config <FILE>`](/cli/overview#global-flags).
 ## Exit codes
 
 `verify` exits **non-zero on any break** in any checked chain, and zero
-otherwise — designed to be gated on directly in CI or a cron job:
+otherwise, designed to be gated on directly in CI or a cron job:
 
 ```sh
 obsidianlog verify || alert-on-call "hash chain broken"

@@ -1,6 +1,6 @@
 ---
 title: "Security Model"
-description: "Client-side encryption, user-controlled keys, and tamper-evidence — the practices ObsidianLog follows."
+description: "Client-side encryption, user-controlled keys, and tamper-evidence: the practices ObsidianLog follows."
 ---
 
 ObsidianLog handles operational logs and the encryption keys that protect
@@ -14,23 +14,23 @@ user-controlled** system.
   network and registered via indexd.
 - **User-controlled keys.** Key generation happens locally during
   `obsidianlog init`. The encryption key and (if configured) the Sia app key
-  are stored together as one bundled credential in your OS keychain — via
+  are stored together as one bundled credential in your OS keychain (via
   the `keyring` crate on Linux/Windows, and a direct macOS Keychain API
-  call on macOS — or an explicit local secrets file with `0600` permissions
+  call on macOS), or an explicit local secrets file with `0600` permissions
   if the keychain is genuinely unreachable. No key escrow, no key
   transmission.
 - **Authenticated encryption.** AES-256-GCM provides both confidentiality
-  and ciphertext integrity — tampered ciphertext is rejected at decryption
+  and ciphertext integrity. Tampered ciphertext is rejected at decryption
   time.
 - **Append-only storage model.** Chunks are write-once. The storage model
   prevents in-place modification, relying on append-only writes combined
   with indexd-coordinated retrieval and SHA-256 hash chaining for
-  tamper-evidence (`obsidianlog verify`) — strong tamper-evidence without
-  requiring a blockchain.
+  tamper-evidence (`obsidianlog verify`), giving strong tamper-evidence
+  without requiring a blockchain.
 - **No intermediary in the storage path.** ObsidianLog connects to an
   indexd-backed Sia indexer for indexing and retrieval coordination, without
   any centralized intermediary. There is no ObsidianLog-operated proxy,
-  gateway, or relay. The builder has zero access to user data — this holds
+  gateway, or relay. The builder has zero access to user data. This holds
   whether you use the [hosted default](/storage-backends/hosted-sia-storage)
   or [bring your own indexer](/storage-backends/bring-your-own-indexer).
 - **Dependency audit.** The Rust dependency tree is audited with

@@ -11,7 +11,7 @@ they match a query.
 
 Logs flow from Vector into the ingest server, through that pipeline, and out
 to a pluggable backend. The `StorageBackend` trait (in `obsidianlog-core`) is
-the seam that keeps storage decoupled from the pipeline — the same pipeline
+the seam that keeps storage decoupled from the pipeline. The same pipeline
 archives to Sia (hosted or self-hosted) or to a local filesystem store with
 no other code change.
 
@@ -41,10 +41,10 @@ This is a Cargo workspace of four crates:
 
 | Crate | Role |
 | --- | --- |
-| `obsidianlog-core` | Foundation library — shared types, the canonical error, and the `StorageBackend` trait (no I/O). |
-| `obsidianlog-store` | Core library — compression, encryption, hash chaining, chunking, metadata index, and the storage backends (Sia + local). |
-| `obsidianlog-ingest` | Service library — the Vector-compatible HTTP ingest server that drives the storage pipeline. |
-| `obsidianlog-cli` | CLI / binary — the `obsidianlog` binary: `init`, `serve`, `query`, `verify`. |
+| `obsidianlog-core` | Foundation library: shared types, the canonical error, and the `StorageBackend` trait (no I/O). |
+| `obsidianlog-store` | Core library: compression, encryption, hash chaining, chunking, metadata index, and the storage backends (Sia + local). |
+| `obsidianlog-ingest` | Service library: the Vector-compatible HTTP ingest server that drives the storage pipeline. |
+| `obsidianlog-cli` | CLI / binary: the `obsidianlog` binary, with `init`, `serve`, `query`, `verify`. |
 
 See [Decisions](/architecture-and-security/decisions) for the reasoning
 behind this layout (ADR-0004) and the storage data model (ADR-0005).

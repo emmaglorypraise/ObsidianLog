@@ -18,10 +18,10 @@ Plus the global [`--config <FILE>`](/cli/overview#global-flags).
 
 | Route | Method | Purpose |
 | --- | --- | --- |
-| `/ingest` | `POST` | Accepts a JSON array of log events. Write-then-ack: returns `200` only after a durable, encrypted, hash-chained write; `5xx` on failure, so an upstream shipper's retry logic just works. |
+| `/ingest` | `POST` | Accepts a JSON array of log events. Write-then-ack: returns `200` only after a durable, encrypted, hash-chained write, and `5xx` on failure, so an upstream shipper's retry logic just works. |
 | `/health` | `GET` | Liveness check. |
 
-`/ingest` has no request authentication — it's designed to sit behind a
+`/ingest` has no request authentication. It's designed to sit behind a
 trusted network boundary (e.g. bound to `127.0.0.1`, or reached only by
 Vector on the same host/private network). See
 [Security Model](/architecture-and-security/security-model).
