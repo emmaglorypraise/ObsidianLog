@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/ci.yml/badge.svg)](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/ci.yml)
 [![Demo](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/demo.yml/badge.svg)](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/demo.yml)
-[![Docs](https://img.shields.io/badge/docs-obsidianlog.mintlify.site-5B4FE9)](https://obsidianlog.mintlify.site/)
+[![Docs](https://img.shields.io/badge/docs-docs.obsidianlog.com-5B4FE9)](https://docs.obsidianlog.com/)
 
 > Long-term, tamper-evident operational log archival on [Sia](https://sia.tech).
 
@@ -14,7 +14,7 @@ verification. You control the encryption keys.
 It is for teams and developers who need logs to remain private, retrievable,
 and tamper-evident after they leave their primary monitoring system.
 
-> **Trying the beta?** Start at the [Beta Testing page](https://obsidianlog.mintlify.site/beta).
+> **Trying the beta?** Start at the [Beta Testing page](https://docs.obsidianlog.com/beta).
 > It explains what to test, what a completed test looks like, and how to give
 > feedback.
 
@@ -27,7 +27,7 @@ No source build is required.
 
 For complete macOS, Windows, and Linux installation instructions, including
 Gatekeeper and SmartScreen guidance, see the
-[Quickstart](https://obsidianlog.mintlify.site/get-started/quickstart).
+[Quickstart](https://docs.obsidianlog.com/get-started/quickstart).
 
 On macOS or Linux, after extracting the archive in a terminal:
 
@@ -61,7 +61,7 @@ curl -s -X POST http://localhost:7080/ingest \
 ```
 
 For step-by-step platform guidance, see the
-[local-backend tutorial](https://obsidianlog.mintlify.site/tutorials/local-backend).
+[local-backend tutorial](https://docs.obsidianlog.com/tutorials/local-backend).
 
 ## Sia-backed archival
 
@@ -71,18 +71,18 @@ ObsidianLog through your own account. You can also supply a self-hosted or
 third-party indexer. The first Sia write may take several minutes, so allow
 15–20 minutes for the full test. Use sample data only while evaluating it.
 
-Follow the [Sia backend tutorial](https://obsidianlog.mintlify.site/tutorials/sia-backend)
+Follow the [Sia backend tutorial](https://docs.obsidianlog.com/tutorials/sia-backend)
 for the complete flow and current hosted-service considerations.
 
 ## Documentation
 
-- [Quickstart](https://obsidianlog.mintlify.site/get-started/quickstart): install and run the full local loop.
-- [Choosing a backend](https://obsidianlog.mintlify.site/storage-backends/choosing-a-backend): local, hosted Sia Storage, or your own indexer.
-- [Send logs with Vector](https://obsidianlog.mintlify.site/deployment/sending-logs-with-vector): connect a real log shipper.
-- [Docker Compose quickstart](https://obsidianlog.mintlify.site/deployment/docker-compose-quickstart): run the local backend in a container.
-- [CLI reference](https://obsidianlog.mintlify.site/cli/overview): `init`, `serve`, `query`, and `verify`.
-- [Architecture and security](https://obsidianlog.mintlify.site/architecture-and-security/pipeline-architecture): pipeline, threat model, and design decisions.
-- [Building from source](https://obsidianlog.mintlify.site/get-started/building-from-source) and [testing against a live Sia indexer](https://obsidianlog.mintlify.site/project/testing-against-sia): developer setup and optional live-Sia integration testing.
+- [Quickstart](https://docs.obsidianlog.com/get-started/quickstart): install and run the full local loop.
+- [Choosing a backend](https://docs.obsidianlog.com/storage-backends/choosing-a-backend): local, hosted Sia Storage, or your own indexer.
+- [Send logs with Vector](https://docs.obsidianlog.com/deployment/sending-logs-with-vector): connect a real log shipper.
+- [Docker Compose quickstart](https://docs.obsidianlog.com/deployment/docker-compose-quickstart): run the local backend in a container.
+- [CLI reference](https://docs.obsidianlog.com/cli/overview): `init`, `serve`, `query`, and `verify`.
+- [Architecture and security](https://docs.obsidianlog.com/architecture-and-security/pipeline-architecture): pipeline, threat model, and design decisions.
+- [Building from source](https://docs.obsidianlog.com/get-started/building-from-source) and [testing against a live Sia indexer](https://docs.obsidianlog.com/project/testing-against-sia): developer setup and optional live-Sia integration testing.
 - [Grant progress tracker](docs/grant/PROGRESS.md): milestones, delivery status, and current success criteria.
 
 ## Try the live demo
