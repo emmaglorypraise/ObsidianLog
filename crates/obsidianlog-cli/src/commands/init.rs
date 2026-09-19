@@ -81,7 +81,7 @@ impl InitAnswers {
         ];
         let backend_idx = Select::with_theme(&theme)
             .with_prompt("Storage backend")
-            .items(&backends)
+            .items(backends)
             .default(if base.indexd.is_some() { 1 } else { 0 })
             .interact()
             .context("reading the storage backend choice")?;
