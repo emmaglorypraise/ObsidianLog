@@ -20,7 +20,7 @@ serde_json.workspace = true
 # Implementing the async StorageBackend trait from obsidianlog-core.
 async-trait.workspace = true
 # Pipeline primitives: zstd (compression), AES-256-GCM (encryption), SHA-256 (hashing).
-zstd = "0.13.3"
+zstd = "0.14.0"
 aes-gcm = "0.11.0"
 sha2 = "0.11.0"
 # Zeroize-on-drop for the AES key newtype so key bytes don't linger in memory.
