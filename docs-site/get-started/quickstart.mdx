@@ -111,9 +111,19 @@ binaries aren't code-signed today:
 
 <Tabs>
   <Tab title="macOS">
-    Gatekeeper blocks it. Right-click `obsidianlog` in Finder and choose
-    **Open** once, or run `xattr -d com.apple.quarantine obsidianlog` in a
-    terminal.
+    Gatekeeper blocks it. The most reliable fix, especially for these
+    command-line binaries, is to clear the quarantine flag directly in a
+    terminal:
+    ```sh
+    xattr -d com.apple.quarantine obsidianlog obsidianlog-ingest
+    ```
+    Prefer the GUI instead? The order matters here: right-click
+    `obsidianlog` in Finder and choose **Open** once (this attempt gets
+    blocked, that's expected, it's what registers the binary with macOS).
+    *Then* go to **System Settings → Privacy & Security**, scroll to the
+    Security section, and click **Open Anyway** next to the message naming
+    `obsidianlog`. That button only appears after a blocked attempt, not
+    before, so doing this step first won't show it.
   </Tab>
   <Tab title="Windows">
     SmartScreen shows "Windows protected your PC." Click **More info**,
