@@ -1,5 +1,5 @@
 ---
-title: "Testing as a Returning User"
+title: "Returning User"
 description: "What to check the second time around: config repair, key rotation, and adding Sia to an existing local setup."
 ---
 
@@ -8,7 +8,7 @@ happens when you come back to an install you already have, since that's
 a genuinely different code path, not just "run init again."
 
 Do this after you've already completed
-[Testing the Local Backend](/tutorials/local-backend) at least once, so
+[Your First Test Run](/tutorials/local-backend) at least once, so
 you have an existing setup to come back to.
 
 ## Scenario 1: you deleted config.toml by accident
@@ -88,7 +88,9 @@ before a wider release.
 
 ## What's next
 
-Haven't tried [Testing with Vector](/tutorials/vector-integration) yet?
+Haven't tried [Trying Out Vector](/tutorials/vector-integration) yet?
 That one proves a real log shipper can feed ObsidianLog, not just a
-single `curl` request. Once you're done testing and want a real, ongoing
-setup rather than a scratch folder, see the [Quickstart](/get-started/quickstart).
+single `curl` request.
+
+These scenarios all ran against your real, default config, not a scratch
+folder, so there's nothing further to migrate.

@@ -1,6 +1,6 @@
 ---
 title: "Quickstart"
-description: "Install a release binary and run your first init → serve → ingest → query → verify loop."
+description: "Install a release binary, then archive your first log and get it back."
 ---
 
 ## Installing a release binary
@@ -14,21 +14,25 @@ ingest server). There's no installer and no dependencies to install
 separately.
 
 Whether extracting it lands those two files in their own folder depends
-on how you extract it. Double-clicking the archive (or Extract All on
-Windows) creates a new folder named after it automatically. Extracting
-from a raw `tar` command doesn't, it dumps the files into whatever
-directory you're already in. The commands below account for both, so you
-end up in a tidy folder either way.
+on how you extract it. Double-clicking the archive (or your file manager's
+Extract option) creates a new folder named after it automatically.
+Extracting from a raw `tar` command doesn't, it dumps the files into
+whatever directory you're already in. The commands below account for
+both, so you end up in a tidy folder either way.
 
 <Tabs>
-  <Tab title="macOS">
-    Double-click the downloaded `.tar.gz` file in Finder. It extracts into
-    a new folder named after the archive. Open that folder, open a
-    terminal there, and run:
+  <Tab title="macOS / Linux">
+    Double-click the downloaded `.tar.gz` file (or use your file manager's
+    **Extract** option). It extracts into a new folder named after the
+    archive. Open that folder, open a terminal there, and run:
     ```sh
     chmod +x obsidianlog obsidianlog-ingest
     ./obsidianlog init
     ```
+    On macOS, the quickest way to open the right folder in Terminal: open
+    Terminal, type `cd ` (including the space), then drag the extracted
+    folder from Finder into the Terminal window and press Enter.
+
     Prefer to do the extraction from a terminal too?
     ```sh
     cd ~/Downloads
@@ -58,24 +62,6 @@ end up in a tidy folder either way.
     .\obsidianlog.exe init
     ```
   </Tab>
-  <Tab title="Linux">
-    Extracting via your file manager (double-click, or right-click →
-    Extract) typically creates a new folder named after the archive. Open
-    that folder, open a terminal there, and run:
-    ```sh
-    chmod +x obsidianlog obsidianlog-ingest
-    ./obsidianlog init
-    ```
-    Prefer to do the extraction from a terminal too?
-    ```sh
-    cd ~/Downloads
-    mkdir obsidianlog-<version>-<target>
-    tar -xzf obsidianlog-<version>-<target>.tar.gz -C obsidianlog-<version>-<target>
-    cd obsidianlog-<version>-<target>
-    chmod +x obsidianlog obsidianlog-ingest
-    ./obsidianlog init
-    ```
-  </Tab>
 </Tabs>
 
 The exact filename depends on which release and target you downloaded,
@@ -91,20 +77,6 @@ does **not** start setup: it has no command to run, so it prints the help
 screen and exits. Open a terminal, change into the extracted folder, then
 run `./obsidianlog init` (or `.\obsidianlog.exe init` on Windows).
 </Note>
-
-On macOS, the quickest way to open the right folder in Terminal is to open
-Terminal, type `cd ` (including the space), then drag the extracted folder
-from Finder into the Terminal window and press Enter. Then run:
-
-```sh
-./obsidianlog init
-```
-
-`obsidianlog` (the CLI) ships **with** the `sia` Cargo feature built in. The
-Sia backend works out of the box, no source build needed. `obsidianlog init`
-still defaults to the local backend regardless. Sia only gets used if you
-choose it. `obsidianlog-ingest` (the standalone, minimal ingest-only binary)
-stays local-only by design.
 
 The first time you run it, your OS may flag it as unsigned, since these
 binaries aren't code-signed today:
@@ -135,36 +107,121 @@ binaries aren't code-signed today:
   </Tab>
 </Tabs>
 
-## The init → serve → query → verify loop
+## Archive your first log and get it back
 
-The CLI wraps setup, ingestion, retrieval, and integrity checking:
+The CLI wraps setup, ingestion, retrieval, and integrity checking. These
+four steps take under a minute and use `--non-interactive`, which always
+picks the local backend and skips every setup question, the fastest way to
+see the whole loop work. Omit that flag if you'd rather answer each
+question yourself.
 
-The commands below assume you are still in the folder you extracted and use
-`./obsidianlog` on macOS/Linux. On Windows, use `./obsidianlog` as
-`.\obsidianlog.exe` instead. Leave `serve` running, then open a second
-terminal in that same folder for the `curl`, `query`, and `verify` commands.
+<Tabs>
+  <Tab title="macOS / Linux">
+    Two terminals, both open in the folder you extracted. Leave the first
+    running `serve`; use the second for everything else.
 
-```sh
-# One-time setup: generates the encryption key (OS keychain, or a 0600
-# secrets file if the keychain isn't available) and writes config.toml.
-./obsidianlog init
+    **1. Set up.** Generates the encryption key and writes `config.toml`.
+    ```sh
+    ./obsidianlog init --non-interactive
+    ```
+    You'll see:
+    ```text
+    obsidianlog initialized.
+      config:      /Users/you/.config/obsidianlog/config.toml
+      credentials: the OS keychain
+    ```
 
-# Run the ingest server using that config.
-./obsidianlog serve
+    **2. Start the server.**
+    ```sh
+    ./obsidianlog serve
+    ```
+    The terminal won't return to a prompt after this, it keeps running
+    until you stop it. That's expected, leave it running and use your
+    second terminal for the rest.
 
-# In another terminal: send it a log batch.
-curl -s -X POST http://localhost:7080/ingest \
-  -H 'content-type: application/json' \
-  -d '[{"timestamp":"2026-07-06T10:00:00Z","service":"api","level":"info","msg":"hello"}]'
+    **3. In the second terminal, send a log.**
+    ```sh
+    curl -s -X POST http://localhost:7080/ingest \
+      -H 'content-type: application/json' \
+      -d '[{"timestamp":"2026-07-06T10:00:00Z","service":"api","level":"info","msg":"hello"}]' \
+      -w '%{http_code}\n'
+    ```
+    A successful ingest has an empty body, so the `200` printed on its own
+    line (from `-w`) is the actual confirmation, not the absence of output.
 
-# Query archived logs. Filters compose, and results are decrypted
-# index-first (only matching chunks are fetched).
-./obsidianlog query --service api --level info --from 24h --format human
+    **4. Query it back.**
+    ```sh
+    ./obsidianlog query --service api --level info --from 24h --format human
+    ```
+    ```text
+    2026-07-06T10:00:00Z  api  info  -  hello
+    ```
 
-# Walk every service's hash chain from genesis and confirm it's intact.
-# Exits non-zero on any break, so CI/cron can gate on it.
-./obsidianlog verify
-```
+    **5. Verify the hash chain.**
+    ```sh
+    ./obsidianlog verify
+    ```
+    ```text
+    OK   api: 1 chunk(s) verified, chain intact
+    ```
+  </Tab>
+  <Tab title="Windows">
+    Two PowerShell windows, both open in the folder you extracted. Leave
+    the first running `serve`; use the second for everything else.
+
+    On some machines, PowerShell doesn't set the environment variable
+    ObsidianLog looks for by default, so pass `--config` explicitly every
+    time to sidestep it entirely:
+    ```powershell
+    $config = "$env:USERPROFILE\.obsidianlog\config.toml"
+    ```
+
+    **1. Set up.**
+    ```powershell
+    .\obsidianlog.exe init --non-interactive --config $config
+    ```
+    You'll see:
+    ```text
+    obsidianlog initialized.
+      config:      C:\Users\you\.obsidianlog\config.toml
+      credentials: the OS keychain
+    ```
+
+    **2. Start the server.**
+    ```powershell
+    .\obsidianlog.exe serve --config $config
+    ```
+    The terminal won't return to a prompt after this, it keeps running
+    until you stop it. That's expected, leave it running and use your
+    second terminal for the rest.
+
+    **3. In the second terminal, send a log.** Assign the JSON to a
+    variable first, PowerShell's quoting breaks on a curl command written
+    the Unix way:
+    ```powershell
+    $json = '[{"timestamp":"2026-07-06T10:00:00Z","service":"api","level":"info","msg":"hello"}]'
+    curl.exe -s -X POST http://localhost:7080/ingest -H "content-type: application/json" -d $json -w "%{http_code}\n"
+    ```
+    A successful ingest has an empty body, so the `200` printed on its own
+    line (from `-w`) is the actual confirmation, not the absence of output.
+
+    **4. Query it back.**
+    ```powershell
+    .\obsidianlog.exe query --config $config --service api --level info --from 24h --format human
+    ```
+    ```text
+    2026-07-06T10:00:00Z  api  info  -  hello
+    ```
+
+    **5. Verify the hash chain.**
+    ```powershell
+    .\obsidianlog.exe verify --config $config
+    ```
+    ```text
+    OK   api: 1 chunk(s) verified, chain intact
+    ```
+  </Tab>
+</Tabs>
 
 See the full [CLI reference](/cli/overview) for every command's flags.
 
@@ -176,13 +233,15 @@ rather than just Allow, so later `serve`/`query`/`verify` runs read them
 without prompting again.
 </Note>
 
-Re-running `obsidianlog init` is idempotent: it detects an existing
-config/key and reuses them. Pass `--force` to rotate the key (this makes
-previously archived data undecryptable with the new key, so it asks for
-confirmation unless you're also non-interactive).
+You've now archived a real log, encrypted and hash-chained, and gotten it
+back out again, the same loop a production deployment runs continuously.
 
 ## What's next
 
+- [Your First Test Run](/tutorials/local-backend): the same loop
+  again, with more detail on what to expect at each step.
+- [Returning User](/tutorials/returning-user): what happens
+  when you re-run `init` later, including rotating the key with `--force`.
 - [Choosing a Backend](/storage-backends/choosing-a-backend): local disk,
   hosted Sia Storage, or bring your own indexer.
 - [Docker Compose Quickstart](/deployment/docker-compose-quickstart): the

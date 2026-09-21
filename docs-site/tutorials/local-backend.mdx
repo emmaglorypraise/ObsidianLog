@@ -1,5 +1,5 @@
 ---
-title: "Testing the Local Backend"
+title: "Your First Test Run"
 description: "The first thing to try: init, serve, ingest, query, verify against the local filesystem, no Sia account needed."
 ---
 
@@ -18,14 +18,24 @@ in the Quickstart has the full walkthrough for macOS, Windows, and Linux.
 Not sure which file to grab in the first place? See the
 [FAQ](/get-started/faq).
 
-The rest of this tutorial writes commands as `./obsidianlog` (macOS/Linux).
-On Windows, that's `.\obsidianlog.exe` instead.
-
 ## 2. Run init
 
-```sh
-./obsidianlog init
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    ./obsidianlog init
+    ```
+  </Tab>
+  <Tab title="Windows">
+    On some machines, PowerShell doesn't set the environment variable
+    ObsidianLog looks for by default, so pass `--config` explicitly every
+    time to sidestep it entirely:
+    ```powershell
+    $config = "$env:USERPROFILE\.obsidianlog\config.toml"
+    .\obsidianlog.exe init --config $config
+    ```
+  </Tab>
+</Tabs>
 
 You'll be asked a handful of questions: storage bucket name, which
 backend (choose **local**), where to store data on disk, the ingest
@@ -33,10 +43,8 @@ server's bind address, and the chunk time window. The defaults are fine
 for testing, just press Enter through each one.
 
 On macOS, you should see **at most one** keychain authorization prompt
-during this step. That's the main thing worth confirming here, so
-please note how many prompts you actually saw when you report back.
-Click **Always Allow** rather than just Allow, so later commands don't
-ask again.
+during this step. Click **Always Allow** rather than just Allow, so later
+commands don't ask again.
 
 {/* <Frame caption="macOS keychain prompt during a fresh init">
   <img src="/images/tutorials/local-init-keychain-prompt.png" />
@@ -44,71 +52,122 @@ ask again.
 
 When it finishes, you'll see something like:
 
-```text
-obsidianlog initialized.
-  config:      /Users/you/.config/obsidianlog/config.toml
-  credentials: the OS keychain
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```text
+    obsidianlog initialized.
+      config:      /Users/you/.config/obsidianlog/config.toml
+      credentials: the OS keychain
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```text
+    obsidianlog initialized.
+      config:      C:\Users\you\.obsidianlog\config.toml
+      credentials: the OS keychain
+    ```
+  </Tab>
+</Tabs>
 
 ## 3. Start the server
 
-```sh
-./obsidianlog serve
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    ./obsidianlog serve
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    .\obsidianlog.exe serve --config $config
+    ```
+  </Tab>
+</Tabs>
 
-This blocks and waits for log batches. Leave it running and open a new
+The terminal won't return to a prompt after this, it keeps running and
+waiting for log batches. That's expected, leave it running and open a new
 terminal for the rest of this tutorial.
 
 ## 4. Send it a test log
 
-```sh
-curl -s -X POST http://localhost:7080/ingest \
-  -H 'content-type: application/json' \
-  -d '[{"timestamp":"2026-09-18T10:00:00Z","service":"tutorial","level":"info","msg":"hello from the local backend"}]'
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    curl -s -X POST http://localhost:7080/ingest \
+      -H 'content-type: application/json' \
+      -d '[{"timestamp":"2026-09-18T10:00:00Z","service":"tutorial","level":"info","msg":"hello from the local backend"}]' \
+      -w '%{http_code}\n'
+    ```
+  </Tab>
+  <Tab title="Windows">
+    Assign the JSON to a variable first, PowerShell's quoting breaks on a
+    curl command written the Unix way:
+    ```powershell
+    $json = '[{"timestamp":"2026-09-18T10:00:00Z","service":"tutorial","level":"info","msg":"hello from the local backend"}]'
+    curl.exe -s -X POST http://localhost:7080/ingest -H "content-type: application/json" -d $json -w "%{http_code}\n"
+    ```
+  </Tab>
+</Tabs>
 
-A successful ingest returns an empty `200 OK`, so no output here is
-actually the expected result, not a sign anything's wrong. If you want
-to double check, add `-w "%{http_code}\n"` to the `curl` command and
-look for `200`.
+A successful ingest has an empty body, so the `200` printed on its own
+line (from `-w`) is the actual confirmation, not the absence of output.
+Without `-w`, a successful request and a hung one look identical: no
+output either way, so it's included above rather than left optional.
 
 ## 5. Query it back
 
-```sh
-./obsidianlog query --service tutorial --format human
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    ./obsidianlog query --service tutorial --format human
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    .\obsidianlog.exe query --config $config --service tutorial --format human
+    ```
+  </Tab>
+</Tabs>
 
 You should see the log line you just sent, decrypted and printed back
 to you.
 
 ## 6. Verify the chain
 
-```sh
-./obsidianlog verify
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    ./obsidianlog verify
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    .\obsidianlog.exe verify --config $config
+    ```
+  </Tab>
+</Tabs>
 
 This walks the hash chain and confirms nothing archived has been
-tampered with. It should print `OK` for the `tutorial` service.
+tampered with. You'll see a line starting with `OK` naming the
+`tutorial` service and how many chunks were verified.
 
 ## Tell us how it went
 
 That's the whole loop. Whether it went smoothly or you got stuck
-somewhere, we'd genuinely like to know. Please open a
+somewhere, please open a
 [feedback report](https://github.com/emmaglorypraise/ObsidianLog/issues/new?template=feedback.yml)
-and if you happened to notice roughly how long `init` took, or how long
-it took between sending the log and being able to query it back, those
-numbers are useful too (there's a spot for them in the form, no need to
-go back and measure on purpose).
+either way, any bugs, friction, or feature requests are worth mentioning.
 
 ## What's next
 
-If this worked, try [Testing the Sia Backend](/tutorials/sia-backend) to
+If this worked, try [Connecting to Sia](/tutorials/sia-backend) to
 see it archive to the real Sia network instead of your local disk, or
-[Testing with Vector](/tutorials/vector-integration) to see a real log
+[Trying Out Vector](/tutorials/vector-integration) to see a real log
 shipper feed it instead of a single `curl` request.
 
-Once you're done testing and want a real, ongoing setup rather than a
-scratch folder, see the [Quickstart](/get-started/quickstart).
+This already set up your real, default config, not a scratch folder, so
+there's nothing further to migrate. Try
+[Returning User](/tutorials/returning-user) next.
 
 When you finish the tutorial, return to the terminal running `serve` and
 press `Ctrl-C` to stop it.

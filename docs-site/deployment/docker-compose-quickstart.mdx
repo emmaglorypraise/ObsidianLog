@@ -22,10 +22,12 @@ docker compose -f docker/docker-compose.yml run --rm obsidianlog \
 # 3. Restart so the now-configured server picks up the generated key.
 docker compose -f docker/docker-compose.yml restart obsidianlog
 
-# 4. Send a test log.
+# 4. Send a test log. A successful ingest has an empty body, so -w is
+#    what actually prints something (a 200 on its own line).
 curl -s -X POST http://localhost:7080/ingest \
   -H 'content-type: application/json' \
-  -d '[{"timestamp":"2026-08-06T10:00:00Z","service":"api","level":"info","msg":"hello from docker"}]'
+  -d '[{"timestamp":"2026-08-06T10:00:00Z","service":"api","level":"info","msg":"hello from docker"}]' \
+  -w '%{http_code}\n'
 
 # 5. Query it back.
 docker compose -f docker/docker-compose.yml run --rm obsidianlog \
