@@ -10,20 +10,33 @@ example in this repo bridges the two with the free
 which reads JSON from a URL.
 
 <Note>
-This is an example, not a shipped product. A dedicated Grafana datasource
-plugin is a possible future direction, not something ObsidianLog ships
+This is an example, not a built-in feature. A dedicated Grafana datasource
+plugin is a possible future direction, not something ObsidianLog includes
 today.
 </Note>
 
 ## How it works
 
 Infinity reads from a **URL**, not a local file or a command, so a small
-script exports a query to JSON and serves it over HTTP:
+script exports a query to JSON and serves it over HTTP. This needs Python
+installed (Windows doesn't bundle it the way macOS and most Linux
+distributions do, get it from [python.org](https://www.python.org/downloads/)
+if you don't have it):
 
-```sh
-obsidianlog query --format json > logs.json
-python3 -m http.server 8787 --bind 127.0.0.1   # serves logs.json at :8787/logs.json
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    obsidianlog query --format json > logs.json
+    python3 -m http.server 8787 --bind 127.0.0.1   # serves logs.json at :8787/logs.json
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    .\obsidianlog.exe query --format json > logs.json
+    python -m http.server 8787 --bind 127.0.0.1   # serves logs.json at :8787/logs.json
+    ```
+  </Tab>
+</Tabs>
 
 <Warning>
 `logs.json` contains decrypted log data. The example binds the temporary
@@ -36,7 +49,10 @@ network.
 The full, runnable version, with argument handling and the run
 instructions, is
 [`examples/integrations/grafana/export-and-serve.sh`](https://github.com/emmaglorypraise/ObsidianLog/blob/main/examples/integrations/grafana/export-and-serve.sh)
-in the repo.
+in the repo. It's a bash script (macOS/Linux, or WSL/Git Bash on
+Windows). On Windows without one of those, run the two commands above
+directly instead, adjusting the port or adding `--config <path>` to the
+query command as needed.
 
 ## Setting it up
 
@@ -45,7 +61,8 @@ in the repo.
 2. Register the datasource: apply
    [`datasource.yaml`](https://github.com/emmaglorypraise/ObsidianLog/blob/main/examples/integrations/grafana/datasource.yaml)
    via Grafana's provisioning mechanism, or add it manually through the UI.
-3. Run the export script (leave it running):
+3. Run the export script (leave it running), or the two commands from
+   [How it works](#how-it-works) above on Windows without WSL/Git Bash:
    ```sh
    ./export-and-serve.sh [path-to-config.toml] [port]
    ```

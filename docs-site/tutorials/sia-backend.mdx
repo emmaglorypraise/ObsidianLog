@@ -1,12 +1,12 @@
 ---
-title: "Testing the Sia Backend"
-description: "Connect ObsidianLog to the real Sia network and archive, query, and verify against it."
+title: "Connecting to Sia"
+description: "Connect ObsidianLog to Sia and archive, query, and verify against it."
 ---
 
-This walks through connecting ObsidianLog to Sia for real, using the
-hosted Sia Storage indexer at [sia.storage](https://sia.storage). You don't
-need to run Sia infrastructure yourself, but you will approve ObsidianLog
-through a Sia Storage account during setup.
+This walks through connecting ObsidianLog to Sia, using the hosted Sia
+Storage indexer at [sia.storage](https://sia.storage). You don't need to
+run Sia infrastructure yourself, but you will approve ObsidianLog through
+a Sia Storage account during setup.
 
 Takes about ten minutes, most of it waiting on a one-time Sia write.
 
@@ -18,22 +18,37 @@ in the Quickstart (or the [FAQ](/get-started/faq) if you're not sure which
 file to grab). The `sia` backend is already built into the official
 release binary, so there's nothing extra to install or compile.
 
-The rest of this tutorial writes commands as `./obsidianlog` (macOS/Linux).
-On Windows, that's `.\obsidianlog.exe` instead.
-
 ## 2. Run init and choose Sia
 
-```sh
-./obsidianlog init --config sia-test/config.toml
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    ./obsidianlog init
+    ```
+  </Tab>
+  <Tab title="Windows">
+    On some machines, PowerShell doesn't set the environment variable
+    ObsidianLog looks for by default. Set it once per window, then every
+    command below works exactly like the macOS/Linux commands, no
+    `--config` needed:
+    ```powershell
+    $env:HOME = $env:USERPROFILE
+    .\obsidianlog.exe init
+    ```
+  </Tab>
+</Tabs>
 
-Using a separate `--config` path like this keeps this test's configuration
-and local data separate from anything you set up in the local backend
-tutorial. The credential bundle is shared by your OS user, though: if you
-already ran `init`, ObsidianLog safely reuses the existing encryption key and
-adds the Sia app key to that bundle. For a genuinely clean keychain-prompt
-test, use a separate OS user or test keychain, not merely a different config
-path.
+Already completed [Your First Test Run](/tutorials/local-backend)? This
+will detect that existing setup and ask "Existing setup found... Reuse
+it?" instead of the fresh wizard described below. Answering **no** there
+and adding Sia to that setup is covered specifically in
+[Returning User](/tutorials/returning-user) (Scenario 3), go there
+instead.
+
+Starting fresh, or want this kept completely separate from an existing
+setup instead of added to it? Keep reading, or add a separate `--config`
+path to every command below (e.g. `--config sia-test/config.toml`) to
+avoid touching anything else on your machine.
 
 Answer the prompts, and when asked for a storage backend, choose **sia**.
 You'll then be asked for an indexd URL (press Enter to accept the
@@ -61,7 +76,7 @@ Open this URL and approve the app in your Sia account:
 Waiting for approval (this blocks until you approve)...
 ```
 
-Open that URL and approve. `init` blocks until you do.
+Open that URL and approve. `init` won't continue until you do.
 
 {/* <Frame caption="The sia.storage approval page">
   <img src="/images/tutorials/sia-approval-page.png" />
@@ -70,37 +85,73 @@ Open that URL and approve. `init` blocks until you do.
 Once approved, `init` finishes the remaining prompts (bind address,
 chunk window) and writes your config. On macOS, this whole flow should
 cost **at most one** keychain prompt, separate from the browser approval
-step. Please note how many you actually saw.
+step.
 
 ## 4. Start the server and send a log
 
-```sh
-./obsidianlog serve --config sia-test/config.toml
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    ./obsidianlog serve
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    .\obsidianlog.exe serve
+    ```
+  </Tab>
+</Tabs>
 
 Leave that terminal running. Open a second terminal in the same extracted
 release folder, then send the test log:
 
-```sh
-curl -s -X POST http://localhost:7080/ingest \
-  -H 'content-type: application/json' \
-  -d '[{"timestamp":"2026-09-18T10:00:00Z","service":"tutorial","level":"info","msg":"hello from Sia"}]'
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    curl -s -X POST http://localhost:7080/ingest \
+      -H 'content-type: application/json' \
+      -d '[{"timestamp":"2026-09-18T10:00:00Z","service":"tutorial","level":"info","msg":"hello from Sia"}]' \
+      -w '%{http_code}\n'
+    ```
+  </Tab>
+  <Tab title="Windows">
+    This is a new window, so run `$env:HOME = $env:USERPROFILE` here too
+    first (it's per-window, not sitewide). Assign the JSON to a variable
+    before sending it, PowerShell's quoting breaks on a curl command
+    written the Unix way:
+    ```powershell
+    $json = '[{"timestamp":"2026-09-18T10:00:00Z","service":"tutorial","level":"info","msg":"hello from Sia"}]'
+    curl.exe -s -X POST http://localhost:7080/ingest -H "content-type: application/json" -d $json -w "%{http_code}\n"
+    ```
+  </Tab>
+</Tabs>
 
 <Note>
 The **first** write to a brand new Sia account can take several minutes,
 not seconds. It's forming a real storage contract behind the scenes, and
 a plain `curl` gives you no progress indicator while that happens. If it
-seems to hang, that's expected. Just let it run. Subsequent writes are
-much faster.
+seems to hang, that's expected. Just let it run. The `200` printed once
+it finishes (from `-w` above) is the actual confirmation, a successful
+ingest has an empty body, so that status line is the only visible sign
+it worked. Subsequent writes are much faster.
 </Note>
 
 ## 5. Query and verify
 
-```sh
-./obsidianlog query --config sia-test/config.toml --service tutorial --format human
-./obsidianlog verify --config sia-test/config.toml
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    ./obsidianlog query --service tutorial --format human
+    ./obsidianlog verify
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    .\obsidianlog.exe query --service tutorial --format human
+    .\obsidianlog.exe verify
+    ```
+  </Tab>
+</Tabs>
 
 `query` decrypts and prints the log line back, and `verify` walks the hash
 chain and confirms nothing archived has been tampered with, exactly like a
@@ -111,19 +162,18 @@ lives on the Sia network now, encrypted under a key only you hold.
 
 Please open a
 [feedback report](https://github.com/emmaglorypraise/ObsidianLog/issues/new?template=feedback.yml)
-either way. If you noticed roughly how long `init` took, or how long the
-first write took before `curl` returned, those numbers help a lot. There's
-a spot for them in the form.
+either way, any bugs, friction, or feature requests are worth mentioning.
 
 ## What's next
 
-Try [Testing as a Returning User](/tutorials/returning-user) to see how
-ObsidianLog behaves when you re-run `init` later, instead of only on a
-fresh install, or [Testing with Vector](/tutorials/vector-integration) to
-see a real log shipper feed it instead of a single `curl` request.
+Try [Returning User](/tutorials/returning-user) to see how
+ObsidianLog behaves when you re-run `init` later, or
+[Trying Out Vector](/tutorials/vector-integration) to see a real log
+shipper feed it instead of a single `curl` request.
 
-Once you're done testing and want a real, ongoing setup rather than a
-scratch folder, see the [Quickstart](/get-started/quickstart).
+Building from source and want to test the Sia integration at the code
+level instead of through the CLI? See
+[Testing Against a Live Sia Indexer](/project/testing-against-sia).
 
 When you finish the tutorial, return to the terminal running `serve` and
 press `Ctrl-C` to stop it.

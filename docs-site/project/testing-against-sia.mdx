@@ -11,13 +11,7 @@ The normal test suite uses the local backend and needs no Sia account. This
 optional test uploads data to a real indexer, retrieves it, and verifies the
 hash chain.
 
-## 1. Build with Sia enabled
-
-```sh
-cargo build -p obsidianlog-cli --features sia
-```
-
-## 2. Connect an app to an indexer
+## 1. Connect an app to an indexer
 
 Generate or enter a recovery phrase only in your terminal. Never commit,
 publish, or paste it into an issue. The onboarding example prints an approval
@@ -28,7 +22,7 @@ App Key.
 cargo run -p obsidianlog-store --features sia --example onboard
 ```
 
-## 3. Run the integration test
+## 2. Run the integration test
 
 Set the indexer URL and App Key only in your shell environment:
 

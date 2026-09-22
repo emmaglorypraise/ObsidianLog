@@ -4,7 +4,8 @@ description: "Run the Vector-compatible HTTP ingest server."
 ---
 
 This starts the HTTP ingest server using the encryption key and backend
-configuration `obsidianlog init` created. It blocks until shutdown.
+configuration `obsidianlog init` created. It runs in the foreground until
+stopped (Ctrl-C, or the process is otherwise shut down).
 
 ## Flags
 
@@ -38,8 +39,13 @@ Send it a batch:
 ```sh
 curl -s -X POST http://localhost:7080/ingest \
   -H 'content-type: application/json' \
-  -d '[{"timestamp":"2026-07-06T10:00:00Z","service":"api","level":"info","msg":"hello"}]'
+  -d '[{"timestamp":"2026-07-06T10:00:00Z","service":"api","level":"info","msg":"hello"}]' \
+  -w '%{http_code}\n'
 ```
+
+A successful ingest has an empty body, so `-w` is what actually prints
+something, a `200` on its own line. Without it, a successful request looks
+identical to a hung one: no output either way.
 
 See [Sending Logs with Vector](/deployment/sending-logs-with-vector) to ship
 real logs instead of a one-off `curl`.

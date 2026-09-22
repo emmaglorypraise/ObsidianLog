@@ -6,7 +6,7 @@ description: "A managed Sia Storage indexer: no indexer infrastructure to operat
 `obsidianlog init`'s Sia backend prompt defaults the indexer URL to
 [`sia.storage`](https://sia.storage), a hosted indexer operated by Sia
 Storage, not by ObsidianLog. Choosing it and accepting the default URL gets
-you real, durable, redundant Sia storage with no indexer infrastructure to
+you durable, redundant Sia storage with no indexer infrastructure to
 operate.
 
 ## How it works
@@ -16,8 +16,9 @@ Sia Storage [currently offers a 50 GB free plan](https://sia.storage/), with
 other plans available. Pricing, quotas, availability, and terms are set by
 Sia Storage and may change.
 `obsidianlog init` runs this approval inline: it prompts for a recovery
-phrase (or generates a new one), shows an approval URL, and blocks until you
-approve it in your Sia account. After that, reconnecting is silent.
+phrase (or generates a new one), shows an approval URL, and waits until you
+approve it in your Sia account before continuing. After that, reconnecting
+is silent.
 
 ## Who pays for storage
 
@@ -28,12 +29,12 @@ not operate or bill for the hosted service. See Sia Storage's
 [trust and deployment model](https://devs.sia.storage/docs/core-concepts/trust-and-deployment)
 for the current responsibility model.
 
-## The security promise still holds
+## Who can read your data
 
 Because encryption happens client-side under a key you hold, before data
 ever reaches the SDK, the indexer operator (`sia.storage`, or anyone else)
-is cryptographically unable to read your archived logs. "We host the
-plumbing but cannot read your archives" is the posture in every mode. See
+is cryptographically unable to read your archived logs, regardless of
+which backend or indexer you choose. See
 [Security Model](/architecture-and-security/security-model).
 
 ## When to use it

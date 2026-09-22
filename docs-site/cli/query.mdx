@@ -36,3 +36,23 @@ obsidianlog query --from 2026-08-01T00:00:00Z --to 2026-08-02T00:00:00Z \
 # Free-text search across everything archived so far.
 obsidianlog query --keyword "connection refused"
 ```
+
+## Retrieve and save one day's logs
+
+`query` is the retrieval command; there is no separate archive-download
+command. To retrieve a service's logs for one UTC day and save the decrypted
+records locally, use exact RFC 3339 bounds with `--format raw`:
+
+```sh
+obsidianlog query \
+  --service payments-api \
+  --from 2026-09-20T00:00:00Z \
+  --to 2026-09-20T23:59:59Z \
+  --format raw \
+  > payments-api-2026-09-20.jsonl
+```
+
+The resulting `.jsonl` file contains one decrypted JSON log event per line.
+It is plaintext data: store, share, and delete it according to the same
+security policy you apply to the original logs. Add `--level`, `--host`, or
+`--keyword` to narrow the exported records further.

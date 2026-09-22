@@ -4,8 +4,7 @@ description: "Client-side encryption, user-controlled keys, and tamper-evidence:
 ---
 
 ObsidianLog handles operational logs and the encryption keys that protect
-them, so this is taken seriously. ObsidianLog is a **self-hosted,
-user-controlled** system.
+them. ObsidianLog is a **self-hosted, user-controlled** system.
 
 ## Practices followed
 
@@ -14,23 +13,22 @@ user-controlled** system.
   network and registered via indexd.
 - **User-controlled keys.** Key generation happens locally during
   `obsidianlog init`. The encryption key and (if configured) the Sia app key
-  are stored together as one bundled credential in your OS keychain (via
-  the `keyring` crate on Linux/Windows, and a direct macOS Keychain API
-  call on macOS), or an explicit local secrets file with `0600` permissions
-  if the keychain is genuinely unreachable. There is no key escrow and no
-  key transmission.
+  are stored together as one bundled credential in your OS keychain via
+  the `keyring` crate, with a direct macOS Keychain API call used only for
+  the initial creation step (see ADR-0015), or an explicit local secrets
+  file with `0600` permissions if the keychain is genuinely unreachable.
+  There is no key escrow and no key transmission.
 - **Authenticated encryption.** AES-256-GCM provides both confidentiality
   and ciphertext integrity. Tampered ciphertext is rejected at decryption
   time.
 - **Append-only storage model.** Chunks are write-once. The storage model
   prevents in-place modification, relying on append-only writes combined
   with indexd-coordinated retrieval and SHA-256 hash chaining for
-  tamper-evidence (`obsidianlog verify`), giving strong tamper-evidence
-  without requiring a blockchain.
+  tamper-evidence (`obsidianlog verify`).
 - **No intermediary in the storage path.** ObsidianLog connects to an
   indexd-backed Sia indexer for indexing and retrieval coordination, without
   any centralized intermediary. There is no ObsidianLog-operated proxy,
-  gateway, or relay. The builder has zero access to user data. This holds
+  gateway, or relay. ObsidianLog has zero access to user data. This holds
   whether you use the [hosted default](/storage-backends/hosted-sia-storage)
   or [bring your own indexer](/storage-backends/bring-your-own-indexer).
 - **Dependency audit.** The Rust dependency tree is audited with
@@ -51,4 +49,4 @@ Please report vulnerabilities **privately** using GitHub's
 (Security tab → "Report a vulnerability"). Do not open a public issue.
 
 Include, where possible: affected crate/version, a description, reproduction
-steps, and impact. Reports are acknowledged within 72 hours.
+steps, and impact.

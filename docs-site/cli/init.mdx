@@ -13,7 +13,7 @@ you pass `--force`.
 | Flag | Description |
 | --- | --- |
 | `--non-interactive` | Accepts every default, with no prompts. It always picks the local backend. Useful for scripting (CI, Docker). |
-| `--force` | Overwrites an existing configuration. This rotates the encryption key, which makes previously archived data undecryptable with the new key, so it asks for confirmation unless you're also non-interactive. |
+| `--force` | Overwrites an existing configuration. This rotates the encryption key, which makes previously archived data undecryptable with the new key. `--force` is explicit opt-in, so it prints a warning and proceeds without asking for confirmation. |
 
 Plus the global [`--config <FILE>`](/cli/overview#global-flags).
 

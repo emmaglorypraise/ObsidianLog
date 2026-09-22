@@ -1,6 +1,6 @@
 ---
 title: "Building From Source"
-description: "Build ObsidianLog from source, including the Sia backend."
+description: "Build ObsidianLog from source, run its tests, and choose which features to compile in."
 ---
 
 ObsidianLog isn't published to crates.io yet, so building from source
@@ -9,15 +9,62 @@ means cloning the repository directly:
 ```sh
 git clone https://github.com/emmaglorypraise/ObsidianLog
 cd ObsidianLog
-cargo build --release
 ```
 
-That builds the default, Sia-free workspace. To build the CLI with the Sia
-backend too, use:
+## Building
+
+<Tabs>
+  <Tab title="Default (local test)">
+    ```sh
+    cargo build --release
+    ```
+    Builds the whole workspace without Sia support. `obsidianlog init` still
+    defaults to the local backend, and `serve`/`query`/`verify` work fully
+    against it. Sia isn't reachable from this build at all: if a config
+    points at a Sia indexer anyway, those commands fail with a clear error
+    instead of silently using local storage.
+  </Tab>
+  <Tab title="With Sia">
+    ```sh
+    cargo build -p obsidianlog-cli --release --features sia
+    ```
+    Builds `obsidianlog` with Sia support included. The official release
+    binaries already include this, so most people don't need this command
+    at all, it only matters if you're building from source.
+  </Tab>
+</Tabs>
+
+Either way, the binary lands at `target/release/obsidianlog`. Want it on
+your `PATH` instead of just built locally? Use `cargo install --path
+crates/obsidianlog-cli` (add `--features sia` for Sia support) to install
+it into your Cargo bin directory.
+
+## Testing
 
 ```sh
-cargo build -p obsidianlog-cli --release --features sia
+# Default features: the Sia code isn't compiled or exercised.
+cargo test --workspace
+
+# Everything, including the Sia integration code paths.
+cargo test --workspace --all-features
 ```
+
+See [Contributing](/project/contributing) for the full set of checks CI
+runs before a PR is reviewed. `--all-features` compiles and exercises the
+Sia code paths, but skips the live-network test without real credentials.
+To actually run it against a real Sia indexer, see
+[Testing Against a Live Sia Indexer](/project/testing-against-sia).
+
+## Feature flags
+
+| Flag | What it enables | Default |
+| --- | --- | --- |
+| `sia` | The real Sia backend for `serve`/`query`/`verify`, and the `onboard` example used to connect an app to a Sia indexer. Without it, a Sia-configured install fails with a clear error rather than silently falling back to local. | Off |
+
+Sia is kept behind a flag instead of being on by default because the
+underlying SDK is pre-1.0. See
+[ADR-0006](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0006-sia-integration.md)
+for the full reasoning, it's not required reading to use this page.
 
 ## Running the standalone ingest server directly
 
@@ -34,23 +81,3 @@ OBSIDIANLOG_ENCRYPTION_KEY=$(openssl rand -hex 32) ./target/release/obsidianlog-
 
 The `obsidianlog` CLI's `init`/`serve` manage this key for you instead. See
 [obsidianlog init](/cli/init) and [obsidianlog serve](/cli/serve).
-
-## Building with the Sia backend
-
-The official prebuilt release binaries already ship **with** the `sia` Cargo
-feature. Sia is this project's Foundation-sponsored storage path, so it's
-built into `obsidianlog` by default. `init` still defaults to the local
-backend unless you choose Sia. Building it yourself from source needs the
-feature passed explicitly. The Sia build command above does that. Default
-builds/tests stay Sia-free because the integration depends on a pre-1.0 SDK (see
-[ADR-0006](https://github.com/emmaglorypraise/ObsidianLog/blob/main/docs/adr/0006-sia-integration.md)).
-
-The command above writes the Sia-capable binary to
-`target/release/obsidianlog`. Use `cargo install --path
-crates/obsidianlog-cli --features sia` instead only if you specifically want
-Cargo to install it into your user-wide Cargo bin directory.
-
-Without this feature, `serve`/`query`/`verify` fail with a clear error the
-moment a config points at a Sia indexer, rather than silently falling back
-to the local backend. See [Storage Backends](/storage-backends/choosing-a-backend)
-for what the Sia backend actually connects to.
