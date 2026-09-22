@@ -34,4 +34,4 @@ fi
 echo "Serving $OUT_DIR at http://localhost:$PORT/logs.json"
 echo "Press Ctrl+C to stop."
 cd "$OUT_DIR"
-python3 -m http.server "$PORT"
+python3 -m http.server "$PORT" --bind 127.0.0.1

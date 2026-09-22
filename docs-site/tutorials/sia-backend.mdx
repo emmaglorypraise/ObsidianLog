@@ -27,7 +27,12 @@ release binary, so there's nothing extra to install or compile.
     ```
   </Tab>
   <Tab title="Windows">
+    On some machines, PowerShell doesn't set the environment variable
+    ObsidianLog looks for by default. Set it once per window, then every
+    command below works exactly like the macOS/Linux commands, no
+    `--config` needed:
     ```powershell
+    $env:HOME = $env:USERPROFILE
     .\obsidianlog.exe init
     ```
   </Tab>
@@ -110,8 +115,10 @@ release folder, then send the test log:
     ```
   </Tab>
   <Tab title="Windows">
-    Assign the JSON to a variable first, PowerShell's quoting breaks on a
-    curl command written the Unix way:
+    This is a new window, so run `$env:HOME = $env:USERPROFILE` here too
+    first (it's per-window, not sitewide). Assign the JSON to a variable
+    before sending it, PowerShell's quoting breaks on a curl command
+    written the Unix way:
     ```powershell
     $json = '[{"timestamp":"2026-09-18T10:00:00Z","service":"tutorial","level":"info","msg":"hello from Sia"}]'
     curl.exe -s -X POST http://localhost:7080/ingest -H "content-type: application/json" -d $json -w "%{http_code}\n"
@@ -164,8 +171,9 @@ ObsidianLog behaves when you re-run `init` later, or
 [Trying Out Vector](/tutorials/vector-integration) to see a real log
 shipper feed it instead of a single `curl` request.
 
-If you followed the default path above, this is already your real,
-ongoing Sia setup, nothing further to migrate.
+Building from source and want to test the Sia integration at the code
+level instead of through the CLI? See
+[Testing Against a Live Sia Indexer](/project/testing-against-sia).
 
 When you finish the tutorial, return to the terminal running `serve` and
 press `Ctrl-C` to stop it.

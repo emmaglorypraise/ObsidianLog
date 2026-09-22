@@ -50,7 +50,10 @@ cargo test --workspace --all-features
 ```
 
 See [Contributing](/project/contributing) for the full set of checks CI
-runs before a PR is reviewed.
+runs before a PR is reviewed. `--all-features` compiles and exercises the
+Sia code paths, but skips the live-network test without real credentials.
+To actually run it against a real Sia indexer, see
+[Testing Against a Live Sia Indexer](/project/testing-against-sia).
 
 ## Feature flags
 

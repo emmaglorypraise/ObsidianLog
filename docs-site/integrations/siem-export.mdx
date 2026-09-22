@@ -7,9 +7,18 @@ description: "Forward archived logs into a SIEM using obsidianlog query --format
 the original ingested event, unmodified. Mainstream SIEM tooling ingests
 this natively:
 
-```sh
-obsidianlog query --format raw --from 24h > /var/log/obsidianlog/archive.ndjson
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    obsidianlog query --format raw --from 24h > /var/log/obsidianlog/archive.ndjson
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    .\obsidianlog.exe query --format raw --from 24h > C:\ProgramData\obsidianlog\archive.ndjson
+    ```
+  </Tab>
+</Tabs>
 
 Run this on a schedule (cron, a systemd timer) for ongoing export. A
 one-off `query` run is a snapshot of what matched at that moment, not a live

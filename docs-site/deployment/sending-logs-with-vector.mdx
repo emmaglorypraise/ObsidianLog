@@ -10,6 +10,11 @@ ObsidianLog uses write-then-ack. It returns `200` only after a durable,
 encrypted, hash-chained write, and `5xx` on failure, so Vector owns
 buffering, backpressure, and retry. A `5xx` is simply retried.
 
+This page is the config reference for a real, ongoing deployment. Want to
+see it proven end to end first, a scratch test file, a real Vector run,
+and the archived data queried back, before wiring up a production
+config? See [Trying Out Vector](/tutorials/vector-integration).
+
 ## Example configuration
 
 ```toml
@@ -50,12 +55,24 @@ exists too).
 
 ## Running it
 
-```sh
-# Run this after `obsidianlog init`. Use ./obsidianlog if you are running
-# directly from an extracted release archive rather than installing it on PATH.
-obsidianlog serve
-vector --config vector.toml
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    # Run this after `obsidianlog init`. Use ./obsidianlog if you are running
+    # directly from an extracted release archive rather than installing it on PATH.
+    obsidianlog serve
+    vector --config vector.toml
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Run this after `obsidianlog init`. Use .\obsidianlog.exe if you are running
+    # directly from an extracted release archive rather than installing it on PATH.
+    obsidianlog.exe serve
+    vector --config vector.toml
+    ```
+  </Tab>
+</Tabs>
 
 See [obsidianlog serve](/cli/serve) for the endpoints Vector's sink talks to.
 The standalone `obsidianlog-ingest` binary is intended for advanced deployments

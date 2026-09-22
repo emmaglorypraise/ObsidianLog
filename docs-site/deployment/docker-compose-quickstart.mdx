@@ -9,31 +9,58 @@ nothing beyond Docker itself.
 
 ## The local-backend path
 
-```sh
-# 1. Start the ingest server (builds the image on first run).
-docker compose -f docker/docker-compose.yml up -d obsidianlog
+Every command here is a plain `docker compose` invocation, identical on
+macOS, Linux, and Windows, except for step 4's `curl`, which needs a
+different form on Windows.
 
-# 2. One-time setup: generates the encryption key (stored inside the
-#    container's persistent volume, not your host keychain) and config.toml
-#    (written to ./docker/config, so you can inspect/edit it).
+**1. Start the ingest server** (builds the image on first run).
+```sh
+docker compose -f docker/docker-compose.yml up -d obsidianlog
+```
+
+**2. One-time setup**: generates the encryption key (stored inside the
+container's persistent volume, not your host keychain) and `config.toml`
+(written to `./docker/config`, so you can inspect/edit it).
+```sh
 docker compose -f docker/docker-compose.yml run --rm obsidianlog \
   init --non-interactive --config /etc/obsidianlog/config.toml
+```
 
-# 3. Restart so the now-configured server picks up the generated key.
+**3. Restart** so the now-configured server picks up the generated key.
+```sh
 docker compose -f docker/docker-compose.yml restart obsidianlog
+```
 
-# 4. Send a test log. A successful ingest has an empty body, so -w is
-#    what actually prints something (a 200 on its own line).
-curl -s -X POST http://localhost:7080/ingest \
-  -H 'content-type: application/json' \
-  -d '[{"timestamp":"2026-08-06T10:00:00Z","service":"api","level":"info","msg":"hello from docker"}]' \
-  -w '%{http_code}\n'
+**4. Send a test log.** A successful ingest has an empty body, so `-w` is
+what actually prints something (a `200` on its own line).
 
-# 5. Query it back.
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    curl -s -X POST http://localhost:7080/ingest \
+      -H 'content-type: application/json' \
+      -d '[{"timestamp":"2026-08-06T10:00:00Z","service":"api","level":"info","msg":"hello from docker"}]' \
+      -w '%{http_code}\n'
+    ```
+  </Tab>
+  <Tab title="Windows">
+    Assign the JSON to a variable first, PowerShell's quoting breaks on a
+    curl command written the Unix way:
+    ```powershell
+    $json = '[{"timestamp":"2026-08-06T10:00:00Z","service":"api","level":"info","msg":"hello from docker"}]'
+    curl.exe -s -X POST http://localhost:7080/ingest -H "content-type: application/json" -d $json -w "%{http_code}\n"
+    ```
+  </Tab>
+</Tabs>
+
+**5. Query it back.**
+```sh
 docker compose -f docker/docker-compose.yml run --rm obsidianlog \
   query --config /etc/obsidianlog/config.toml --service api
+```
 
-# 6. Verify the hash chain.
+**6. Verify the hash chain.**
+```sh
 docker compose -f docker/docker-compose.yml run --rm obsidianlog \
   verify --config /etc/obsidianlog/config.toml
 ```
@@ -46,6 +73,25 @@ same file-based fallback described in
 [Security Model](/architecture-and-security/security-model) kicks in
 automatically. To ship real logs instead of the `curl` smoke test,
 see [Sending Logs with Vector](/deployment/sending-logs-with-vector).
+
+## Optional: hosted Sia storage
+
+Point the container at the hosted [sia.storage](https://sia.storage)
+indexer instead of local disk, with no self-hosted `indexd` to run.
+Replace step 2 of the local-backend path above with an interactive
+setup instead, so you can choose Sia and complete the browser approval:
+
+```sh
+docker compose -f docker/docker-compose.yml run --rm -it obsidianlog \
+  init --config /etc/obsidianlog/config.toml
+```
+
+Choose **sia** at the backend prompt and accept the `sia.storage`
+default at the indexer URL prompt. The recovery-phrase and
+browser-approval flow works the same as outside Docker, see
+[Connecting to Sia](/tutorials/sia-backend) for what to expect. Then
+continue with steps 3–6 above unchanged, restarting the container picks
+up the generated key and Sia app key together.
 
 ## Optional: self-hosted `indexd`
 

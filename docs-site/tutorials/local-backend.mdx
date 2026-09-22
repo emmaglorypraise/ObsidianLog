@@ -28,11 +28,12 @@ Not sure which file to grab in the first place? See the
   </Tab>
   <Tab title="Windows">
     On some machines, PowerShell doesn't set the environment variable
-    ObsidianLog looks for by default, so pass `--config` explicitly every
-    time to sidestep it entirely:
+    ObsidianLog looks for by default. Set it once per window, then every
+    command below works exactly like the macOS/Linux commands, no
+    `--config` needed:
     ```powershell
-    $config = "$env:USERPROFILE\.obsidianlog\config.toml"
-    .\obsidianlog.exe init --config $config
+    $env:HOME = $env:USERPROFILE
+    .\obsidianlog.exe init
     ```
   </Tab>
 </Tabs>
@@ -63,7 +64,7 @@ When it finishes, you'll see something like:
   <Tab title="Windows">
     ```text
     obsidianlog initialized.
-      config:      C:\Users\you\.obsidianlog\config.toml
+      config:      C:\Users\you\.config\obsidianlog\config.toml
       credentials: the OS keychain
     ```
   </Tab>
@@ -79,7 +80,7 @@ When it finishes, you'll see something like:
   </Tab>
   <Tab title="Windows">
     ```powershell
-    .\obsidianlog.exe serve --config $config
+    .\obsidianlog.exe serve
     ```
   </Tab>
 </Tabs>
@@ -100,8 +101,10 @@ terminal for the rest of this tutorial.
     ```
   </Tab>
   <Tab title="Windows">
-    Assign the JSON to a variable first, PowerShell's quoting breaks on a
-    curl command written the Unix way:
+    This is a new window, so run `$env:HOME = $env:USERPROFILE` here too
+    first (it's per-window, not sitewide). Assign the JSON to a variable
+    before sending it, PowerShell's quoting breaks on a curl command
+    written the Unix way:
     ```powershell
     $json = '[{"timestamp":"2026-09-18T10:00:00Z","service":"tutorial","level":"info","msg":"hello from the local backend"}]'
     curl.exe -s -X POST http://localhost:7080/ingest -H "content-type: application/json" -d $json -w "%{http_code}\n"
@@ -124,7 +127,7 @@ output either way, so it's included above rather than left optional.
   </Tab>
   <Tab title="Windows">
     ```powershell
-    .\obsidianlog.exe query --config $config --service tutorial --format human
+    .\obsidianlog.exe query --service tutorial --format human
     ```
   </Tab>
 </Tabs>
@@ -142,7 +145,7 @@ to you.
   </Tab>
   <Tab title="Windows">
     ```powershell
-    .\obsidianlog.exe verify --config $config
+    .\obsidianlog.exe verify
     ```
   </Tab>
 </Tabs>

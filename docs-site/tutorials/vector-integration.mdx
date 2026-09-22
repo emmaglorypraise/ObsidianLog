@@ -30,18 +30,38 @@ vector --version
 
 ## 3. Set up ObsidianLog
 
-```sh
-mkdir vector-test && cd vector-test
-../obsidianlog init --config config.toml
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    mkdir vector-test && cd vector-test
+    ../obsidianlog init --config config.toml
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    mkdir vector-test
+    cd vector-test
+    ..\obsidianlog.exe init --config config.toml
+    ```
+  </Tab>
+</Tabs>
 
 Choose the local backend for this tutorial, it keeps things simple since
 the point here is proving Vector's wiring, not re-testing Sia. Then start
 the server:
 
-```sh
-../obsidianlog serve --config config.toml
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    ../obsidianlog serve --config config.toml
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    ..\obsidianlog.exe serve --config config.toml
+    ```
+  </Tab>
+</Tabs>
 
 If that fails with an address-already-in-use error, an `obsidianlog serve`
 from an earlier tutorial is probably still running on port 7080, stop that
@@ -54,9 +74,18 @@ Leave it running and open a new terminal for the rest of this tutorial.
 
 Vector needs a real file to watch. In your `vector-test` folder:
 
-```sh
-echo '{"timestamp":"2026-09-19T10:00:00Z","service":"vector-tutorial","level":"info","msg":"hello from vector"}' >> app.log
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    echo '{"timestamp":"2026-09-19T10:00:00Z","service":"vector-tutorial","level":"info","msg":"hello from vector"}' >> app.log
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    '{"timestamp":"2026-09-19T10:00:00Z","service":"vector-tutorial","level":"info","msg":"hello from vector"}' | Add-Content -Encoding ascii app.log
+    ```
+  </Tab>
+</Tabs>
 
 ## 5. Write a Vector config
 
@@ -102,18 +131,37 @@ window). Leave Vector running, then open a third terminal, `cd` into the
 same `vector-test` folder, and append a second line to prove Vector is
 actually watching the file, not just reading it once:
 
-```sh
-echo '{"timestamp":"2026-09-19T10:05:00Z","service":"vector-tutorial","level":"warn","msg":"a second line, sent live"}' >> app.log
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    echo '{"timestamp":"2026-09-19T10:05:00Z","service":"vector-tutorial","level":"warn","msg":"a second line, sent live"}' >> app.log
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    '{"timestamp":"2026-09-19T10:05:00Z","service":"vector-tutorial","level":"warn","msg":"a second line, sent live"}' | Add-Content -Encoding ascii app.log
+    ```
+  </Tab>
+</Tabs>
 
 ## 7. Query and verify
 
 Back in that same `vector-test` folder:
 
-```sh
-../obsidianlog query --config config.toml --service vector-tutorial --format human
-../obsidianlog verify --config config.toml
-```
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    ../obsidianlog query --config config.toml --service vector-tutorial --format human
+    ../obsidianlog verify --config config.toml
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    ..\obsidianlog.exe query --config config.toml --service vector-tutorial --format human
+    ..\obsidianlog.exe verify --config config.toml
+    ```
+  </Tab>
+</Tabs>
 
 Both log lines should come back, in order, decrypted, exactly as Vector
 sent them.

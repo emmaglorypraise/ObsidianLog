@@ -13,8 +13,16 @@
           "index",
           "beta",
           "get-started/quickstart",
-          "get-started/building-from-source",
           "get-started/faq"
+        ]
+      },
+      {
+        "group": "Tutorials",
+        "pages": [
+          "tutorials/local-backend",
+          "tutorials/sia-backend",
+          "tutorials/returning-user",
+          "tutorials/vector-integration"
         ]
       },
       {
@@ -25,15 +33,6 @@
           "cli/serve",
           "cli/query",
           "cli/verify"
-        ]
-      },
-      {
-        "group": "Tutorials",
-        "pages": [
-          "tutorials/local-backend",
-          "tutorials/sia-backend",
-          "tutorials/returning-user",
-          "tutorials/vector-integration"
         ]
       },
       {
@@ -68,9 +67,10 @@
         ]
       },
       {
-        "group": "Project",
+        "group": "Contributing & Support",
         "pages": [
           "project/contributing",
+          "get-started/building-from-source",
           "project/testing-against-sia",
           "project/where-to-get-help"
         ]
