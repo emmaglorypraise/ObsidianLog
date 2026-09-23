@@ -3,8 +3,16 @@
   "theme": "mint",
   "name": "ObsidianLog",
   "colors": {
-    "primary": "#5B4FE9"
+    "primary": "#5B4FE9",
+    "light": "#8B7FFF",
+    "dark": "#3E33B8"
   },
+  "logo": {
+    "light": "/logo/light.png",
+    "dark": "/logo/dark.png",
+    "href": "https://docs.obsidianlog.com/"
+  },
+  "favicon": "/logo/favicon.png",
   "navigation": {
     "groups": [
       {
