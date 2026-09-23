@@ -1,4 +1,7 @@
-# ObsidianLog
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/obsidianlog-wordmark-dark.png">
+  <img src="assets/brand/obsidianlog-wordmark-light.png" alt="ObsidianLog" width="440">
+</picture>
 
 [![CI](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/ci.yml/badge.svg)](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/ci.yml)
 [![Demo](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/demo.yml/badge.svg)](https://github.com/emmaglorypraise/ObsidianLog/actions/workflows/demo.yml)
