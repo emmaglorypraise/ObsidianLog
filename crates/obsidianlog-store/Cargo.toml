@@ -1,6 +1,7 @@
 [package]
 name = "obsidianlog-store"
 description = "ObsidianLog core storage library: zstd compression, AES-256-GCM encryption, SHA-256 hash chaining, and append-only chunking over a pluggable Sia/indexd backend."
+readme = "../../README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
