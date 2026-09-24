@@ -103,4 +103,6 @@ Sia account or secrets required.
 
 ## License
 
-[MIT](LICENSE) © Glory Praise Emmanuel.
+This project is under the [MIT license](LICENSE).
+
+This project is supported by a [Sia Foundation](https://sia.tech/grants) grant.
