@@ -92,6 +92,12 @@ Vector needs a real file to watch. In your `vector-test` folder:
 Save this as `vector.toml` in the same folder:
 
 ```toml
+# Where Vector persists file-source checkpoint state. Without this, Vector
+# falls back to /var/lib/vector/, a Unix path that doesn't exist on Windows,
+# and refuses to start. Vector doesn't create this directory itself, run
+# `mkdir vector-data` once before the first `vector --config vector.toml`.
+data_dir = "./vector-data"
+
 [sources.app_logs]
 type = "file"
 include = ["app.log"]
@@ -120,9 +126,23 @@ in the repo, trimmed down for this tutorial.
 
 ## 6. Run Vector
 
-```sh
-vector --config vector.toml
-```
+Vector needs its `data_dir` folder (set in the config above) to already
+exist, create it once before the first run:
+
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    mkdir vector-data
+    vector --config vector.toml
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    mkdir vector-data
+    vector --config vector.toml
+    ```
+  </Tab>
+</Tabs>
 
 Vector picks up the line already in `app.log`, parses it, and posts it to
 ObsidianLog within a second or two (`batch.timeout_secs = 1` above keeps

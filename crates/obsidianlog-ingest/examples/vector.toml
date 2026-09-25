@@ -6,7 +6,14 @@
 # and retry, so a 5xx is simply retried.
 #
 #   obsidianlog-ingest              # start the server (defaults to 127.0.0.1:7080)
+#   mkdir vector-data                # once, before the first run (see data_dir below)
 #   vector --config vector.toml     # start shipping
+
+# Where Vector persists file-source checkpoint state (which lines it's already
+# read). Without this, Vector falls back to /var/lib/vector/, a Unix path that
+# doesn't exist on Windows, and refuses to start. Vector doesn't create this
+# directory itself, so it must already exist before the first run.
+data_dir = "./vector-data"
 
 # --- Source: tail your application's log files (swap for your real source) ---
 [sources.app_logs]

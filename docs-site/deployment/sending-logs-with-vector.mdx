@@ -18,6 +18,13 @@ config? See [Trying Out Vector](/tutorials/vector-integration).
 ## Example configuration
 
 ```toml
+# Where Vector persists file-source checkpoint state (which lines it's
+# already read). Without this, Vector falls back to /var/lib/vector/, a
+# Unix path that doesn't exist on Windows, and refuses to start. Vector
+# doesn't create this directory itself, run `mkdir vector-data` once
+# before the first run.
+data_dir = "./vector-data"
+
 # --- Source: tail your application's log files (swap for your real source) ---
 [sources.app_logs]
 type = "file"
@@ -55,12 +62,16 @@ exists too).
 
 ## Running it
 
+Vector needs its `data_dir` folder (set in the config above) to already
+exist, create it once before the first run.
+
 <Tabs>
   <Tab title="macOS / Linux">
     ```sh
     # Run this after `obsidianlog init`. Use ./obsidianlog if you are running
     # directly from an extracted release archive rather than installing it on PATH.
     obsidianlog serve
+    mkdir vector-data
     vector --config vector.toml
     ```
   </Tab>
@@ -69,6 +80,7 @@ exists too).
     # Run this after `obsidianlog init`. Use .\obsidianlog.exe if you are running
     # directly from an extracted release archive rather than installing it on PATH.
     obsidianlog.exe serve
+    mkdir vector-data
     vector --config vector.toml
     ```
   </Tab>
