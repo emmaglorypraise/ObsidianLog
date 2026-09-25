@@ -21,6 +21,7 @@
           "index",
           "beta",
           "get-started/quickstart",
+          "get-started/cargo-install",
           "get-started/faq"
         ]
       },

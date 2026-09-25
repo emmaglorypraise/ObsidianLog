@@ -3,31 +3,10 @@ title: "Building From Source"
 description: "Build ObsidianLog from source, run its tests, and choose which features to compile in."
 ---
 
-All four ObsidianLog crates are published on
-[crates.io](https://crates.io/crates/obsidianlog-cli). If you just want the
-`obsidianlog` binary and already have a Rust toolchain, installing via Cargo
-is the quickest path, no clone required. Building from a git clone is for
-the latest unreleased code, or if you're contributing.
-
-## Installing via Cargo
-
-```sh
-cargo install obsidianlog-cli
-```
-
-This matches the "Default" build below: no Sia support, `obsidianlog init`
-defaults to the local backend. To include Sia support (what the official
-release binaries ship with):
-
-```sh
-cargo install obsidianlog-cli --features sia
-```
-
-Either command installs the `obsidianlog` binary into your Cargo bin
-directory (`~/.cargo/bin` by default), already on your `PATH` if you've used
-`cargo install` before.
-
-## Building from a git clone
+Building from a git clone gets you the latest, possibly-unreleased code,
+useful if you're contributing or want a fix that hasn't shipped in a
+release yet. Just want the last published version, without cloning
+anything? See [Install with Cargo](/get-started/cargo-install).
 
 ```sh
 git clone https://github.com/emmaglorypraise/ObsidianLog
