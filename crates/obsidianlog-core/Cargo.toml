@@ -1,6 +1,7 @@
 [package]
 name = "obsidianlog-core"
 description = "ObsidianLog core vocabulary: shared domain types, the canonical error, and the StorageBackend trait. Pure — no I/O, no crypto, no Sia/indexd code."
+readme = "../../README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

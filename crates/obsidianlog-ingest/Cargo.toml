@@ -1,6 +1,7 @@
 [package]
 name = "obsidianlog-ingest"
 description = "ObsidianLog HTTP ingest service: a Vector-compatible endpoint that drives log batches through the obsidianlog-store pipeline into Sia."
+readme = "../../README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
