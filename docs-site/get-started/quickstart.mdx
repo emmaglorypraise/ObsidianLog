@@ -169,14 +169,6 @@ question yourself.
     Two PowerShell windows, both open in the folder you extracted. Leave
     the first running `serve`; use the second for everything else.
 
-    On some machines, PowerShell doesn't set the environment variable
-    ObsidianLog looks for by default. Set it once per window, then every
-    command below works exactly like the macOS/Linux commands, no
-    `--config` needed:
-    ```powershell
-    $env:HOME = $env:USERPROFILE
-    ```
-
     **1. Set up.**
     ```powershell
     .\obsidianlog.exe init --non-interactive
@@ -196,8 +188,7 @@ question yourself.
     until you stop it. That's expected, leave it running and use your
     second terminal for the rest.
 
-    **3. In the second terminal, run `$env:HOME = $env:USERPROFILE`
-    again first (it's per-window, not sitewide), then send a log.**
+    **3. In the second terminal, send a log.**
     Assign the JSON to a variable first, PowerShell's quoting breaks on a
     curl command written the Unix way:
     ```powershell

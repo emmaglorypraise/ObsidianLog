@@ -27,12 +27,7 @@ release binary, so there's nothing extra to install or compile.
     ```
   </Tab>
   <Tab title="Windows">
-    On some machines, PowerShell doesn't set the environment variable
-    ObsidianLog looks for by default. Set it once per window, then every
-    command below works exactly like the macOS/Linux commands, no
-    `--config` needed:
     ```powershell
-    $env:HOME = $env:USERPROFILE
     .\obsidianlog.exe init
     ```
   </Tab>
@@ -115,10 +110,8 @@ release folder, then send the test log:
     ```
   </Tab>
   <Tab title="Windows">
-    This is a new window, so run `$env:HOME = $env:USERPROFILE` here too
-    first (it's per-window, not sitewide). Assign the JSON to a variable
-    before sending it, PowerShell's quoting breaks on a curl command
-    written the Unix way:
+    Assign the JSON to a variable before sending it, PowerShell's quoting
+    breaks on a curl command written the Unix way:
     ```powershell
     $json = '[{"timestamp":"2026-09-18T10:00:00Z","service":"tutorial","level":"info","msg":"hello from Sia"}]'
     curl.exe -s -X POST http://localhost:7080/ingest -H "content-type: application/json" -d $json -w "%{http_code}\n"
