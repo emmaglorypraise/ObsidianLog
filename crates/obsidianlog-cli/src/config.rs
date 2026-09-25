@@ -11,7 +11,8 @@
 //!
 //! 1. An explicit `--config PATH` (the file must exist).
 //! 2. `$XDG_CONFIG_HOME/obsidianlog/config.toml`, if `XDG_CONFIG_HOME` is set.
-//! 3. `~/.config/obsidianlog/config.toml` otherwise.
+//! 3. `~/.config/obsidianlog/config.toml` otherwise, where `~` is `$HOME`, or
+//!    `%USERPROFILE%` when `HOME` isn't set (the default on Windows).
 //!
 //! If neither `--config` nor a file at the resolved default path is present,
 //! [`Config::load`] falls back to [`Config::default`] rather than erroring —
@@ -147,15 +148,25 @@ impl Default for ChunkingConfig {
 /// Resolve the default config path from XDG/home environment values.
 ///
 /// Pure function over already-read env vars so it can be unit tested without
-/// mutating (or depending on) the real process environment.
-fn resolve_default_path(xdg_config_home: Option<&str>, home: Option<&str>) -> Result<PathBuf> {
+/// mutating (or depending on) the real process environment. `userprofile` is
+/// the Windows fallback: PowerShell and cmd.exe don't set `HOME` by default
+/// (only `USERPROFILE`), so without it every fresh Windows install fails
+/// here before `init` gets a chance to run.
+fn resolve_default_path(
+    xdg_config_home: Option<&str>,
+    home: Option<&str>,
+    userprofile: Option<&str>,
+) -> Result<PathBuf> {
     if let Some(xdg) = xdg_config_home.filter(|s| !s.is_empty()) {
         return Ok(PathBuf::from(xdg).join("obsidianlog").join("config.toml"));
     }
-    let home = home.context(
-        "could not determine the config directory: neither XDG_CONFIG_HOME nor HOME is set \
-         (pass --config explicitly)",
-    )?;
+    let home = home
+        .filter(|s| !s.is_empty())
+        .or_else(|| userprofile.filter(|s| !s.is_empty()))
+        .context(
+            "could not determine the config directory: none of XDG_CONFIG_HOME, HOME, or \
+             USERPROFILE is set (pass --config explicitly)",
+        )?;
     Ok(PathBuf::from(home)
         .join(".config")
         .join("obsidianlog")
@@ -186,11 +197,13 @@ pub enum ConfigLoadOutcome {
 
 impl Config {
     /// Resolve the default config path (`$XDG_CONFIG_HOME/obsidianlog/config.toml`,
-    /// falling back to `~/.config/obsidianlog/config.toml`).
+    /// falling back to `~/.config/obsidianlog/config.toml`, using `USERPROFILE`
+    /// in place of `HOME` on Windows when `HOME` itself isn't set).
     pub fn default_path() -> Result<PathBuf> {
         resolve_default_path(
             std::env::var("XDG_CONFIG_HOME").ok().as_deref(),
             std::env::var("HOME").ok().as_deref(),
+            std::env::var("USERPROFILE").ok().as_deref(),
         )
     }
 
@@ -317,13 +330,13 @@ mod tests {
 
     #[test]
     fn default_path_prefers_xdg_config_home() {
-        let path = resolve_default_path(Some("/xdg"), Some("/home/user")).unwrap();
+        let path = resolve_default_path(Some("/xdg"), Some("/home/user"), None).unwrap();
         assert_eq!(path, PathBuf::from("/xdg/obsidianlog/config.toml"));
     }
 
     #[test]
     fn default_path_falls_back_to_home_when_xdg_unset() {
-        let path = resolve_default_path(None, Some("/home/user")).unwrap();
+        let path = resolve_default_path(None, Some("/home/user"), None).unwrap();
         assert_eq!(
             path,
             PathBuf::from("/home/user/.config/obsidianlog/config.toml")
@@ -332,7 +345,7 @@ mod tests {
 
     #[test]
     fn default_path_falls_back_to_home_when_xdg_empty() {
-        let path = resolve_default_path(Some(""), Some("/home/user")).unwrap();
+        let path = resolve_default_path(Some(""), Some("/home/user"), None).unwrap();
         assert_eq!(
             path,
             PathBuf::from("/home/user/.config/obsidianlog/config.toml")
@@ -340,8 +353,28 @@ mod tests {
     }
 
     #[test]
-    fn default_path_errors_when_neither_is_set() {
-        assert!(resolve_default_path(None, None).is_err());
+    fn default_path_falls_back_to_userprofile_when_home_unset() {
+        // The default state of a fresh Windows shell: HOME isn't set, only
+        // USERPROFILE is.
+        let path = resolve_default_path(None, None, Some(r"C:\Users\user")).unwrap();
+        assert_eq!(
+            path,
+            PathBuf::from(r"C:\Users\user").join(".config/obsidianlog/config.toml")
+        );
+    }
+
+    #[test]
+    fn default_path_prefers_home_over_userprofile_when_both_set() {
+        let path = resolve_default_path(None, Some("/home/user"), Some(r"C:\Users\user")).unwrap();
+        assert_eq!(
+            path,
+            PathBuf::from("/home/user/.config/obsidianlog/config.toml")
+        );
+    }
+
+    #[test]
+    fn default_path_errors_when_none_are_set() {
+        assert!(resolve_default_path(None, None, None).is_err());
     }
 
     #[test]

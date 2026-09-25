@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `Config::default_path()` failed on every default Windows shell (`error:
+  could not determine the config directory: neither XDG_CONFIG_HOME nor
+  HOME is set`), since PowerShell and cmd.exe set `USERPROFILE`, not
+  `HOME`. Now falls back to `USERPROFILE` when `HOME` is unset. Found via
+  two independent external Windows testers hitting it on a fresh install.
 - `default_key_store`'s fallback to the local secrets file only triggered
   on `keyring::Error::NoStorageAccess`, missing a distinct error variant
   (`NoDefaultStore`) that a headless Linux environment with no D-Bus Secret
