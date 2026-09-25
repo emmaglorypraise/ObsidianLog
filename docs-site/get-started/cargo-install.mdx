@@ -1,0 +1,194 @@
+---
+title: "Install with Cargo"
+description: "Install ObsidianLog straight from crates.io with cargo install, no download or git clone needed."
+---
+
+Already have Rust? This is the fastest path to a working `obsidianlog` if
+you don't want to download a release archive or clone the repository.
+Want the latest, possibly-unreleased code instead of the last published
+version? See [Building From Source](/get-started/building-from-source).
+
+## Prerequisites
+
+You need Rust and Cargo installed. Check:
+
+```sh
+cargo --version
+```
+
+If that fails, install Rust via [rustup](https://rustup.rs):
+
+<Tabs>
+  <Tab title="macOS / Linux">
+    ```sh
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    ```
+    Follow the on-screen prompts, then restart your terminal (or run the
+    `source` command it prints at the end) so `cargo` is on your `PATH`.
+  </Tab>
+  <Tab title="Windows">
+    Download and run [rustup-init.exe](https://rustup.rs), or install via
+    winget:
+    ```powershell
+    winget install Rustlang.Rustup
+    ```
+    Restart PowerShell afterward so `cargo` is on your `PATH`.
+  </Tab>
+</Tabs>
+
+## Installing
+
+```sh
+cargo install obsidianlog-cli
+```
+
+This matches the local backend's default: no Sia support, `obsidianlog
+init` defaults to the local backend. To include Sia support (what the
+official release binaries ship with):
+
+```sh
+cargo install obsidianlog-cli --features sia
+```
+
+Either command installs the `obsidianlog` binary into your Cargo bin
+directory (`~/.cargo/bin` by default, `%USERPROFILE%\.cargo\bin` on
+Windows), already on your `PATH` if you've used `cargo install` before.
+Unlike the release binary or Docker paths, there's no folder to extract
+or `cd` into, `obsidianlog` runs from wherever you are.
+
+Want the standalone ingest server too?
+
+```sh
+cargo install obsidianlog-ingest
+```
+
+Most people don't need this separately, `obsidianlog serve` already wraps
+it and manages its encryption key for you. See
+[Running the standalone ingest server directly](/get-started/building-from-source#running-the-standalone-ingest-server-directly)
+if you do.
+
+## Archive your first log and get it back
+
+The same setup, ingestion, retrieval, and integrity-check loop as the
+[Quickstart](/get-started/quickstart), just running `obsidianlog` directly
+instead of `./obsidianlog` from an extracted folder.
+
+<Tabs>
+  <Tab title="macOS / Linux">
+    Two terminals. Leave the first running `serve`; use the second for
+    everything else.
+
+    **1. Set up.**
+    ```sh
+    obsidianlog init --non-interactive
+    ```
+    You'll see:
+    ```text
+    obsidianlog initialized.
+      config:      /Users/you/.config/obsidianlog/config.toml
+      credentials: the OS keychain
+    ```
+
+    **2. Start the server.**
+    ```sh
+    obsidianlog serve
+    ```
+    The terminal won't return to a prompt after this, it keeps running
+    until you stop it. Leave it running and use your second terminal for
+    the rest.
+
+    **3. In the second terminal, send a log.**
+    ```sh
+    curl -s -X POST http://localhost:7080/ingest \
+      -H 'content-type: application/json' \
+      -d '[{"timestamp":"2026-07-06T10:00:00Z","service":"api","level":"info","msg":"hello"}]' \
+      -w '%{http_code}\n'
+    ```
+    A successful ingest has an empty body, so the `200` printed on its own
+    line (from `-w`) is the actual confirmation, not the absence of output.
+
+    **4. Query it back.**
+    ```sh
+    obsidianlog query --service api --level info --from 24h --format human
+    ```
+    ```text
+    2026-07-06T10:00:00Z  api  info  -  hello
+    ```
+
+    **5. Verify the hash chain.**
+    ```sh
+    obsidianlog verify
+    ```
+    ```text
+    OK   api: 1 chunk(s) verified, chain intact
+    ```
+  </Tab>
+  <Tab title="Windows">
+    Two PowerShell windows. Leave the first running `serve`; use the
+    second for everything else.
+
+    **1. Set up.**
+    ```powershell
+    obsidianlog.exe init --non-interactive
+    ```
+    You'll see:
+    ```text
+    obsidianlog initialized.
+      config:      C:\Users\you\.config\obsidianlog\config.toml
+      credentials: the OS keychain
+    ```
+
+    **2. Start the server.**
+    ```powershell
+    obsidianlog.exe serve
+    ```
+    The terminal won't return to a prompt after this, it keeps running
+    until you stop it. Leave it running and use your second terminal for
+    the rest.
+
+    **3. In the second terminal, send a log.**
+    Assign the JSON to a variable first, PowerShell's quoting breaks on a
+    curl command written the Unix way:
+    ```powershell
+    $json = '[{"timestamp":"2026-07-06T10:00:00Z","service":"api","level":"info","msg":"hello"}]'
+    curl.exe -s -X POST http://localhost:7080/ingest -H "content-type: application/json" -d $json -w "%{http_code}\n"
+    ```
+    A successful ingest has an empty body, so the `200` printed on its own
+    line (from `-w`) is the actual confirmation, not the absence of output.
+
+    **4. Query it back.**
+    ```powershell
+    obsidianlog.exe query --service api --level info --from 24h --format human
+    ```
+    ```text
+    2026-07-06T10:00:00Z  api  info  -  hello
+    ```
+
+    **5. Verify the hash chain.**
+    ```powershell
+    obsidianlog.exe verify
+    ```
+    ```text
+    OK   api: 1 chunk(s) verified, chain intact
+    ```
+  </Tab>
+</Tabs>
+
+See the full [CLI reference](/cli/overview) for every command's flags.
+
+<Note>
+On macOS, `init` will prompt at most once for your login-keychain password.
+This is the OS asking permission for `obsidianlog` to store the credentials
+it just generated, not an ObsidianLog password. Click **Always Allow**
+rather than just Allow, so later `serve`/`query`/`verify` runs read them
+without prompting again.
+</Note>
+
+## What's next
+
+- [Your First Test Run](/tutorials/local-backend): the same loop again,
+  with more detail on what to expect at each step.
+- [Choosing a Backend](/storage-backends/choosing-a-backend): local disk,
+  hosted Sia Storage, or bring your own indexer.
+- [Docker Compose Quickstart](/deployment/docker-compose-quickstart): the
+  same loop, containerized.
