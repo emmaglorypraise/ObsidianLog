@@ -28,13 +28,8 @@ delete it:
     ```
   </Tab>
   <Tab title="Windows">
-    On some machines, PowerShell doesn't set the environment variable
-    ObsidianLog looks for by default. Set it once per window, then every
-    command below works exactly like the macOS/Linux commands, no
-    `--config` needed:
     ```powershell
-    $env:HOME = $env:USERPROFILE
-    Remove-Item "$env:HOME\.config\obsidianlog\config.toml"
+    Remove-Item "$env:USERPROFILE\.config\obsidianlog\config.toml"
     .\obsidianlog.exe init
     ```
   </Tab>
@@ -82,7 +77,6 @@ was exposed. That's what `--force` is for:
   </Tab>
   <Tab title="Windows">
     ```powershell
-    $env:HOME = $env:USERPROFILE
     .\obsidianlog.exe init --force
     ```
   </Tab>
@@ -108,7 +102,6 @@ same install, rather than starting a separate one:
   </Tab>
   <Tab title="Windows">
     ```powershell
-    $env:HOME = $env:USERPROFILE
     .\obsidianlog.exe init
     ```
   </Tab>
