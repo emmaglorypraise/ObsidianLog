@@ -1,29 +1,25 @@
 name: Release
 
-# Cross-platform binary release pipeline. Built ahead of need (per the
-# "cross-platform static binary shipping" risk mitigation) so it is ready well
-# before the Month 2/3 distribution milestones.
+# Cross-platform binary release pipeline. Triggers on a pushed semver tag
+# (e.g. `v0.1.0`), builds `obsidianlog` and `obsidianlog-ingest` for each
+# target, and attaches them to a GitHub Release. Two jobs handle that
+# because upload-rust-binary-action only uploads to an existing release, it
+# doesn't create one — create-gh-release-action does that first.
 #
-# Triggers on a pushed semver tag (e.g. `v0.1.0`). Builds both the
-# `obsidianlog` CLI and the standalone `obsidianlog-ingest` binary for each
-# target and attaches them to a GitHub Release (created for the tag by
-# create-gh-release-action, since upload-rust-binary-action only uploads to
-# an existing release, it doesn't create one).
+# `obsidianlog` is built WITH the `sia` feature so the official release
+# actually exercises Sia instead of pointing testers at a source build for
+# it; `obsidianlog init` still defaults to the local backend regardless.
+# `obsidianlog-ingest` has no `sia` feature to enable at all — see its own
+# module docs for why it stays local-only by design.
 #
-# `obsidianlog` (the CLI binary) is built WITH the `sia` feature: Sia is this
-# project's Foundation-sponsored storage path, not an optional extra, so the
-# official release needs to actually exercise it rather than point testers at
-# a source build for the one path the grant is about. The local backend stays
-# the runtime default either way — `obsidianlog init` only connects to Sia if
-# you choose it — so this only changes what's compiled in, not what happens
-# by default. `obsidianlog-ingest` (the standalone, minimal ingest-only
-# binary) intentionally has no `sia` feature to enable at all — see its own
-# module docs for why that binary stays local-only by design.
+# `publish-crates` (crates.io) only runs via manual workflow_dispatch, never
+# on a tag push — publishing there is effectively irreversible.
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -54,6 +50,8 @@ jobs:
 
   create-release:
     name: Create the GitHub Release
+    # Skip on a manual publish-crates dispatch; `upload` skips transitively.
+    if: github.event_name == 'push'
     needs: verify-no-native-tls
     runs-on: ubuntu-latest
     steps:
@@ -125,4 +123,47 @@ jobs:
               ldd "$bin_path" || true
               exit 1
             fi
+          done
+
+  publish-crates:
+    name: Publish to crates.io
+    if: github.event_name == 'workflow_dispatch'
+    needs: verify-no-native-tls
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish in dependency order (core -> store -> ingest -> cli)
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          for crate in obsidianlog-core obsidianlog-store obsidianlog-ingest obsidianlog-cli; do
+            echo "::group::$crate"
+            version=$(cargo metadata --no-deps --format-version 1 \
+              | jq -r --arg name "$crate" '.packages[] | select(.name == $name) | .version')
+
+            if curl -sf "https://crates.io/api/v1/crates/$crate/$version" > /dev/null; then
+              echo "$crate@$version is already published, skipping."
+              echo "::endgroup::"
+              continue
+            fi
+
+            cargo publish -p "$crate"
+
+            echo "Waiting for $crate@$version to be indexed on crates.io..."
+            for i in $(seq 1 30); do
+              if curl -sf "https://crates.io/api/v1/crates/$crate/$version" > /dev/null; then
+                echo "$crate@$version is live."
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "::error::$crate@$version never showed up on crates.io after 5 minutes."
+                exit 1
+              fi
+              sleep 10
+            done
+            echo "::endgroup::"
           done
