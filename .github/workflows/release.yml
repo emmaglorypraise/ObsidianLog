@@ -138,6 +138,8 @@ jobs:
       - name: Publish in dependency order (core -> store -> ingest -> cli)
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          # crates.io's API rejects requests with no descriptive User-Agent.
+          CRATES_IO_UA: "obsidianlog-release-workflow (https://github.com/emmaglorypraise/ObsidianLog)"
         run: |
           set -euo pipefail
           for crate in obsidianlog-core obsidianlog-store obsidianlog-ingest obsidianlog-cli; do
@@ -145,25 +147,15 @@ jobs:
             version=$(cargo metadata --no-deps --format-version 1 \
               | jq -r --arg name "$crate" '.packages[] | select(.name == $name) | .version')
 
-            if curl -sf "https://crates.io/api/v1/crates/$crate/$version" > /dev/null; then
+            if curl -sf -A "$CRATES_IO_UA" "https://crates.io/api/v1/crates/$crate/$version" > /dev/null; then
               echo "$crate@$version is already published, skipping."
               echo "::endgroup::"
               continue
             fi
 
+            # cargo publish already waits for the version to be confirmed on
+            # the registry before returning, so the next crate in the loop
+            # can resolve it as a dependency without any extra polling here.
             cargo publish -p "$crate"
-
-            echo "Waiting for $crate@$version to be indexed on crates.io..."
-            for i in $(seq 1 30); do
-              if curl -sf "https://crates.io/api/v1/crates/$crate/$version" > /dev/null; then
-                echo "$crate@$version is live."
-                break
-              fi
-              if [ "$i" -eq 30 ]; then
-                echo "::error::$crate@$version never showed up on crates.io after 5 minutes."
-                exit 1
-              fi
-              sleep 10
-            done
             echo "::endgroup::"
           done
