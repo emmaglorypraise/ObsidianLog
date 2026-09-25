@@ -6,6 +6,7 @@
 # Run Vector against this file from the host (simplest — no extra compose
 # service needed):
 #
+#   mkdir vector-data                    # once, before the first run
 #   vector --config docker/vector.toml
 #
 # Since `obsidianlog`'s port is published (`7080:7080` in docker-compose.yml),
@@ -15,6 +16,12 @@
 # `http://obsidianlog:7080/ingest` (Compose's built-in service-name DNS) and
 # add a `vector` service to docker-compose.yml using the `timberio/vector`
 # image with this file mounted in.
+
+# Where Vector persists file-source checkpoint state (which lines it's already
+# read). Without this, Vector falls back to /var/lib/vector/, a Unix path that
+# doesn't exist on Windows, and refuses to start. Vector doesn't create this
+# directory itself, so it must already exist before the first run.
+data_dir = "./vector-data"
 
 # --- Source: tail your application's log files (swap for your real source) ---
 [sources.app_logs]
