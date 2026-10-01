@@ -59,7 +59,7 @@ curl -s -X POST http://localhost:7080/ingest \
   -H 'content-type: application/json' \
   -d '[{"timestamp":"2026-09-18T10:00:00Z","service":"api","level":"info","msg":"hello"}]'
 
-./obsidianlog query --service api --level info --from 24h --format human
+./obsidianlog query --service api --level info --format human
 ./obsidianlog verify
 ```
 

@@ -151,7 +151,7 @@ question yourself.
 
     **4. Query it back.**
     ```sh
-    ./obsidianlog query --service api --level info --from 24h --format human
+    ./obsidianlog query --service api --level info --format human
     ```
     ```text
     2026-07-06T10:00:00Z  api  info  -  hello
@@ -189,18 +189,19 @@ question yourself.
     second terminal for the rest.
 
     **3. In the second terminal, send a log.**
-    Assign the JSON to a variable first, PowerShell's quoting breaks on a
-    curl command written the Unix way:
+    Send it with PowerShell's built-in `Invoke-WebRequest`, not `curl.exe`.
+    Windows PowerShell 5.1 (the default shell) strips the quotes inside the
+    JSON when it passes it to `curl.exe`, so the server would reject it:
     ```powershell
     $json = '[{"timestamp":"2026-07-06T10:00:00Z","service":"api","level":"info","msg":"hello"}]'
-    curl.exe -s -X POST http://localhost:7080/ingest -H "content-type: application/json" -d $json -w "%{http_code}\n"
+    (Invoke-WebRequest -UseBasicParsing -Method Post -Uri http://localhost:7080/ingest -ContentType 'application/json' -Body $json).StatusCode
     ```
     A successful ingest has an empty body, so the `200` printed on its own
-    line (from `-w`) is the actual confirmation, not the absence of output.
+    line (from `.StatusCode`) is the actual confirmation, not the absence of output.
 
     **4. Query it back.**
     ```powershell
-    .\obsidianlog.exe query --service api --level info --from 24h --format human
+    .\obsidianlog.exe query --service api --level info --format human
     ```
     ```text
     2026-07-06T10:00:00Z  api  info  -  hello
