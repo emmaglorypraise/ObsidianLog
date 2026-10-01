@@ -31,8 +31,9 @@ docker compose -f docker/docker-compose.yml run --rm obsidianlog \
 docker compose -f docker/docker-compose.yml restart obsidianlog
 ```
 
-**4. Send a test log.** A successful ingest has an empty body, so `-w` is
-what actually prints something (a `200` on its own line).
+**4. Send a test log.** A successful ingest has an empty body, so `-w` (or
+`.StatusCode` on Windows) is what actually prints something (a `200` on its
+own line).
 
 <Tabs>
   <Tab title="macOS / Linux">
@@ -44,11 +45,12 @@ what actually prints something (a `200` on its own line).
     ```
   </Tab>
   <Tab title="Windows">
-    Assign the JSON to a variable first, PowerShell's quoting breaks on a
-    curl command written the Unix way:
+    Send it with PowerShell's built-in `Invoke-WebRequest`, not `curl.exe`.
+    Windows PowerShell 5.1 (the default shell) strips the quotes inside the
+    JSON when it passes it to `curl.exe`, so the server would reject it:
     ```powershell
     $json = '[{"timestamp":"2026-08-06T10:00:00Z","service":"api","level":"info","msg":"hello from docker"}]'
-    curl.exe -s -X POST http://localhost:7080/ingest -H "content-type: application/json" -d $json -w "%{http_code}\n"
+    (Invoke-WebRequest -UseBasicParsing -Method Post -Uri http://localhost:7080/ingest -ContentType 'application/json' -Body $json).StatusCode
     ```
   </Tab>
 </Tabs>

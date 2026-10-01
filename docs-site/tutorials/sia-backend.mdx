@@ -110,11 +110,12 @@ release folder, then send the test log:
     ```
   </Tab>
   <Tab title="Windows">
-    Assign the JSON to a variable before sending it, PowerShell's quoting
-    breaks on a curl command written the Unix way:
+    Send it with PowerShell's built-in `Invoke-WebRequest`, not `curl.exe`.
+    Windows PowerShell 5.1 (the default shell) strips the quotes inside the
+    JSON when it passes it to `curl.exe`, so the server would reject it:
     ```powershell
     $json = '[{"timestamp":"2026-09-18T10:00:00Z","service":"tutorial","level":"info","msg":"hello from Sia"}]'
-    curl.exe -s -X POST http://localhost:7080/ingest -H "content-type: application/json" -d $json -w "%{http_code}\n"
+    (Invoke-WebRequest -UseBasicParsing -Method Post -Uri http://localhost:7080/ingest -ContentType 'application/json' -Body $json).StatusCode
     ```
   </Tab>
 </Tabs>
@@ -122,11 +123,11 @@ release folder, then send the test log:
 <Note>
 The **first** write to a brand new Sia account can take several minutes,
 not seconds. It's forming a real storage contract behind the scenes, and
-a plain `curl` gives you no progress indicator while that happens. If it
-seems to hang, that's expected. Just let it run. The `200` printed once
-it finishes (from `-w` above) is the actual confirmation, a successful
-ingest has an empty body, so that status line is the only visible sign
-it worked. Subsequent writes are much faster.
+the ingest command gives you no progress indicator while that happens. If
+it seems to hang, that's expected. Just let it run. The `200` printed once
+it finishes (from `-w` or `.StatusCode` above) is the actual confirmation,
+a successful ingest has an empty body, so that status line is the only
+visible sign it worked. Subsequent writes are much faster.
 </Note>
 
 ## 5. Query and verify
