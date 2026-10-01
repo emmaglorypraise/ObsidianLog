@@ -104,8 +104,11 @@ instead of `./obsidianlog` from an extracted folder.
       -d '[{"timestamp":"2026-07-06T10:00:00Z","service":"api","level":"info","msg":"hello"}]' \
       -w '%{http_code}\n'
     ```
-    A successful ingest has an empty body, so the `200` printed on its own
-    line (from `-w`) is the actual confirmation, not the absence of output.
+    You should see `200` on its own line. That's the only output: a
+    successful ingest returns an empty response, `-s` hides curl's progress
+    meter, and `-w '%{http_code}\n'` prints the status code so you can tell
+    it worked. If you see an error message and a code like `400` instead,
+    the server rejected the log, and the message says why.
 
     **4. Query it back.**
     ```sh
@@ -154,8 +157,10 @@ instead of `./obsidianlog` from an extracted folder.
     $json = '[{"timestamp":"2026-07-06T10:00:00Z","service":"api","level":"info","msg":"hello"}]'
     (Invoke-WebRequest -UseBasicParsing -Method Post -Uri http://localhost:7080/ingest -ContentType 'application/json' -Body $json).StatusCode
     ```
-    A successful ingest has an empty body, so the `200` printed on its own
-    line (from `.StatusCode`) is the actual confirmation, not the absence of output.
+    You should see `200`. That's the only output: a successful ingest
+    returns an empty response, and `.StatusCode` prints the status so you can
+    tell it worked. If the server rejects the log, PowerShell shows a red
+    error instead, and the server's reason appears in that message.
 
     **4. Query it back.**
     ```powershell
