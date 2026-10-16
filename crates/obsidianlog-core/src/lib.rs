@@ -60,6 +60,7 @@ mod tests {
             sequence: 1,
             prev_hash: [0u8; 32],
             nonce: [0u8; 12],
+            key_salt: None,
             created_at: ts(0),
             record_count: 2,
             uncompressed_len: 4,
@@ -81,6 +82,10 @@ mod tests {
 
         let header = sample_header();
         round_trip(&header);
+        round_trip(&ChunkHeader {
+            key_salt: Some([9u8; 32]),
+            ..sample_header()
+        });
 
         let chunk = Chunk {
             header: header.clone(),
@@ -139,6 +144,30 @@ mod tests {
 
         assert_eq!(header.canonical_bytes(), expected);
         assert_eq!(expected.len(), 96);
+
+        // With a key salt (ADR-0016): the same 96 bytes, then a 0x01 marker
+        // and the 32-byte salt.
+        let salted = ChunkHeader {
+            key_salt: Some([5u8; 32]),
+            ..sample_header()
+        };
+        expected.push(0x01);
+        expected.extend_from_slice(&[5u8; 32]);
+        assert_eq!(salted.canonical_bytes(), expected);
+    }
+
+    #[test]
+    fn pre_adr_0016_headers_still_decode_and_serialize_identically() {
+        // A header as written before ADR-0016: no `key_salt` field at all.
+        let mut legacy = serde_json::to_value(sample_header()).unwrap();
+        assert!(
+            legacy.get("key_salt").is_none(),
+            "an unsalted header must not grow a key_salt field when re-serialized"
+        );
+        legacy.as_object_mut().unwrap().remove("key_salt");
+        let decoded: ChunkHeader = serde_json::from_value(legacy).unwrap();
+        assert_eq!(decoded.key_salt, None);
+        assert_eq!(decoded, sample_header());
     }
 
     #[test]

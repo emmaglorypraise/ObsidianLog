@@ -2,7 +2,8 @@
 //!
 //! A chunk is the unit written to storage: one compressed-then-encrypted blob of
 //! log records for a `(service, time_window)`, plus a header carrying the
-//! per-service hash-chain link and the AES-GCM nonce.
+//! per-service hash-chain link, the AES-GCM nonce, and the salt its per-chunk
+//! subkey was derived from.
 //!
 //! ## Canonical hashing layout
 //!
@@ -45,6 +46,12 @@ pub struct ChunkHeader {
     pub prev_hash: [u8; 32],
     /// AES-256-GCM nonce used for this chunk's ciphertext.
     pub nonce: [u8; 12],
+    /// Random HKDF salt this chunk's AES subkey was derived from (ADR-0016).
+    /// `None` for chunks written before ADR-0016, which were sealed directly
+    /// under the master key; omitted from the stored header in that case, so
+    /// those chunks still decode and hash exactly as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_salt: Option<[u8; 32]>,
     /// When the chunk was sealed (UTC).
     pub created_at: DateTime<Utc>,
     /// Number of log records in the chunk.
@@ -70,6 +77,10 @@ impl ChunkHeader {
     /// | `created_at` | `i64` milliseconds since the Unix epoch |
     /// | `record_count` | `u32` |
     /// | `uncompressed_len` | `u64` |
+    /// | `key_salt` | only if present: `0x01` + 32 bytes |
+    ///
+    /// `key_salt` is appended only when present, so headers written before
+    /// ADR-0016 hash to exactly the same bytes as they always did.
     pub fn canonical_bytes(&self) -> Vec<u8> {
         let mut out = Vec::new();
         push_str(&mut out, &self.service);
@@ -80,6 +91,10 @@ impl ChunkHeader {
         out.extend_from_slice(&self.created_at.timestamp_millis().to_be_bytes());
         out.extend_from_slice(&self.record_count.to_be_bytes());
         out.extend_from_slice(&self.uncompressed_len.to_be_bytes());
+        if let Some(salt) = &self.key_salt {
+            out.push(0x01);
+            out.extend_from_slice(salt);
+        }
         out
     }
 }

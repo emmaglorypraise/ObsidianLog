@@ -305,6 +305,7 @@ mod tests {
                 sequence,
                 prev_hash: [0u8; 32],
                 nonce: [1u8; 12],
+                key_salt: None,
                 created_at: ts(1_700_000_000),
                 record_count: 1,
                 uncompressed_len: ciphertext.len() as u64,

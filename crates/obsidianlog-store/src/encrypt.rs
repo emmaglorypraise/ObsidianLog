@@ -5,18 +5,26 @@
 //! a flipped bit, the wrong key, or the wrong nonce — is rejected at decryption
 //! time rather than silently returning garbage.
 //!
-//! ## Nonce invariant (critical)
+//! ## Key and nonce invariant (critical)
 //!
 //! A `(key, nonce)` pair MUST NEVER be reused. A single reuse under one key is
 //! catastrophic for GCM: it leaks the XOR of the two plaintexts and lets an
-//! attacker forge the authentication tag. This module therefore **never
-//! generates a nonce** — the caller supplies it, derived deterministically from
-//! the chunk's per-service monotonic sequence number (the counter lives in the
-//! `Manifest`). That counter is the single source of nonce uniqueness. See
-//! ADR-0002.
+//! attacker forge the authentication tag.
+//!
+//! Each chunk is therefore sealed under its **own subkey**, derived with
+//! HKDF-SHA256 from the master key and a fresh random 256-bit salt
+//! ([`EncryptionKey::derive_chunk_key`], [`generate_salt`]); the salt is stored
+//! in the chunk header. Uniqueness of the effective `(key, nonce)` pair no
+//! longer depends on any persisted state — a stale or rolled-back manifest
+//! counter cannot cause a reuse. The nonce is still derived deterministically
+//! from the chunk's `(service_id, sequence)` ([`derive_nonce`]) as defense in
+//! depth. This module never generates a nonce itself. See ADR-0002 and
+//! ADR-0016.
 
 use aes_gcm::aead::{Aead, Nonce};
 use aes_gcm::{Aes256Gcm, Key, KeyInit};
+use hkdf::Hkdf;
+use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::error::{Error, Result};
@@ -27,6 +35,11 @@ pub const KEY_LEN: usize = 32;
 pub const NONCE_LEN: usize = 12;
 /// AES-GCM authentication tag length, in bytes, appended to each ciphertext.
 pub const TAG_LEN: usize = 16;
+/// Per-chunk HKDF salt length, in bytes (256 bits).
+pub const SALT_LEN: usize = 32;
+
+/// HKDF `info` label binding derived subkeys to this one purpose and version.
+const CHUNK_KEY_INFO: &[u8] = b"obsidianlog/chunk-key/v1";
 
 /// A 256-bit AES key.
 ///
@@ -64,6 +77,32 @@ impl EncryptionKey {
     pub fn expose_secret(&self) -> &[u8; KEY_LEN] {
         &self.0
     }
+
+    /// Derive the AES-256 subkey for one chunk: HKDF-SHA256 with this key as
+    /// input keying material, `salt` as the HKDF salt, and a fixed `info`
+    /// label. Each chunk gets a fresh random `salt` ([`generate_salt`]), so
+    /// each chunk is sealed under a distinct key (ADR-0016).
+    pub fn derive_chunk_key(&self, salt: &[u8; SALT_LEN]) -> Result<Self> {
+        let mut okm = [0u8; KEY_LEN];
+        Hkdf::<Sha256>::new(Some(salt), &self.0)
+            .expand(CHUNK_KEY_INFO, &mut okm)
+            .map_err(|_| Error::Crypto("HKDF output length invalid".into()))?;
+        let key = Self(okm);
+        okm.zeroize();
+        Ok(key)
+    }
+}
+
+/// Generate a fresh per-chunk HKDF salt from the OS CSPRNG.
+///
+/// 256 random bits make a repeat negligible at any archive size (birthday
+/// bound ~2^-128 after 2^64 chunks), and — unlike the manifest counter —
+/// nothing a backup restore or failed write does can roll it back.
+pub fn generate_salt() -> Result<[u8; SALT_LEN]> {
+    let mut salt = [0u8; SALT_LEN];
+    getrandom::getrandom(&mut salt)
+        .map_err(|e| Error::Crypto(format!("OS CSPRNG unavailable: {e}")))?;
+    Ok(salt)
 }
 
 // Redacted Debug so key material can never leak into logs or error output.
@@ -89,8 +128,12 @@ impl std::fmt::Debug for EncryptionKey {
 /// assigned the same discriminator (contrast the earlier `SHA-256(name)[..4]`
 /// scheme, where two service *names* could collide in 32 bits — a cheap,
 /// attacker-triggerable search since the name is untrusted input; see
-/// ADR-0009 and `obsidianlog-store/tests/nonce_uniqueness.rs`). Both
-/// properties together satisfy GCM's nonce-uniqueness requirement (ADR-0002).
+/// ADR-0009 and `obsidianlog-store/tests/nonce_uniqueness.rs`).
+///
+/// Since ADR-0016 this is defense in depth, not the primary guarantee: each
+/// chunk is also sealed under its own random-salt subkey, so a rolled-back
+/// `sequence` (failed manifest write, restored backup) can't reuse a
+/// `(key, nonce)` pair.
 pub fn derive_nonce(service_id: u32, sequence: u64) -> [u8; NONCE_LEN] {
     let mut nonce = [0u8; NONCE_LEN];
     nonce[..4].copy_from_slice(&service_id.to_be_bytes());
@@ -215,6 +258,45 @@ mod tests {
         let bytes = [0x77; KEY_LEN];
         let key = EncryptionKey::new(bytes);
         assert_eq!(*key.expose_secret(), bytes);
+    }
+
+    #[test]
+    fn derive_chunk_key_is_deterministic_per_salt_and_distinct_across_salts() {
+        let master = EncryptionKey::new([0x11; KEY_LEN]);
+        let a = master.derive_chunk_key(&[1; SALT_LEN]).unwrap();
+        let a_again = master.derive_chunk_key(&[1; SALT_LEN]).unwrap();
+        let b = master.derive_chunk_key(&[2; SALT_LEN]).unwrap();
+        assert_eq!(a.expose_secret(), a_again.expose_secret());
+        assert_ne!(a.expose_secret(), b.expose_secret());
+        assert_ne!(a.expose_secret(), master.expose_secret());
+        // A different master key with the same salt yields a different subkey.
+        let other = EncryptionKey::new([0x22; KEY_LEN]);
+        assert_ne!(
+            a.expose_secret(),
+            other
+                .derive_chunk_key(&[1; SALT_LEN])
+                .unwrap()
+                .expose_secret()
+        );
+    }
+
+    #[test]
+    fn same_nonce_under_different_salts_does_not_share_a_keystream() {
+        // The failure ADR-0016 closes: two chunks with the *same* nonce (a
+        // rolled-back sequence) must not be sealed under the same key.
+        let master = EncryptionKey::new([0x33; KEY_LEN]);
+        let k1 = master.derive_chunk_key(&generate_salt().unwrap()).unwrap();
+        let k2 = master.derive_chunk_key(&generate_salt().unwrap()).unwrap();
+        let zeros = [0u8; 64];
+        let c1 = encrypt_chunk(&k1, NONCE, &zeros).unwrap();
+        let c2 = encrypt_chunk(&k2, NONCE, &zeros).unwrap();
+        // Encrypting zeros exposes the keystream directly; it must differ.
+        assert_ne!(c1[..64], c2[..64]);
+    }
+
+    #[test]
+    fn generate_salt_produces_distinct_salts() {
+        assert_ne!(generate_salt().unwrap(), generate_salt().unwrap());
     }
 
     #[test]

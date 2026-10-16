@@ -24,6 +24,7 @@ We follow the lightweight [Michael Nygard format](https://cognitect.com/blog/201
 - [0013 — Refuse to ingest when a service has chunks but no manifest entry](0013-refuse-ingest-on-lost-manifest-with-existing-chunks.md)
 - [0014 — Advisory lock enforces the single-writer assumption per data directory](0014-single-writer-advisory-lock.md)
 - [0015 — One bundled credential item for single-prompt setup](0015-bundled-credential-single-prompt-setup.md)
+- [0016 — Per-chunk subkeys so nonce safety doesn't depend on the manifest](0016-per-chunk-subkeys.md)
 
 ## Adding an ADR
 
