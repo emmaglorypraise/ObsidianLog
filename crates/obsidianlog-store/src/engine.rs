@@ -8,7 +8,10 @@
 //!
 //! Each chunk's `prev_hash` and nonce derive from its service's current chain
 //! head and sequence number, so two writers for the *same* service must not
-//! interleave (that would fork the chain and, fatally, reuse a nonce). A batch
+//! interleave (that would fork the chain). Each chunk is also sealed under its
+//! own random-salt subkey (ADR-0016), so even when a sequence number *is*
+//! repeated — a failed manifest write, a restored backup — no `(key, nonce)`
+//! pair is reused. A batch
 //! therefore holds the **per-service async lock** of every service it touches for
 //! its whole duration. Each window's chunk+index archive is built serially (so
 //! the hash chain links in order), but the archives are **uploaded concurrently**
@@ -36,7 +39,7 @@ use obsidianlog_core::types::GENESIS;
 use crate::chain::{ChainBreak, ChainBreakKind, compute_chunk_hash, verify_chain};
 use crate::chunking::{DEFAULT_WINDOW_SECS, chunk_batch, window_bounds};
 use crate::compress::{DEFAULT_LEVEL, compress, decompress};
-use crate::encrypt::{EncryptionKey, decrypt_chunk, derive_nonce, encrypt_chunk};
+use crate::encrypt::{EncryptionKey, decrypt_chunk, derive_nonce, encrypt_chunk, generate_salt};
 use crate::index::{IndexQuery, build_index, might_match, record_matches};
 
 /// Max archives uploaded concurrently per batch (bounds fan-out to the backend).
@@ -127,12 +130,17 @@ impl<B: StorageBackend> ArchiveEngine<B> {
                 },
             };
 
-            // Serialize + compress, derive the nonce, and encrypt.
+            // Serialize + compress, derive the nonce and this chunk's own
+            // subkey, and encrypt. The fresh salt makes the effective
+            // (key, nonce) pair unique even if `sequence` has been rolled back
+            // by a failed manifest write or a restore (ADR-0016).
             let plaintext = serde_json::to_vec(&bucket.records)?;
             let uncompressed_len = plaintext.len() as u64;
             let compressed = compress(&plaintext, self.compression_level)?;
             let nonce = derive_nonce(service_id, sequence);
-            let ciphertext = encrypt_chunk(&self.key, nonce, &compressed)?;
+            let key_salt = generate_salt()?;
+            let chunk_key = self.key.derive_chunk_key(&key_salt)?;
+            let ciphertext = encrypt_chunk(&chunk_key, nonce, &compressed)?;
 
             // Assemble + hash the chunk (prev_hash = this service's current head).
             let created_at = bucket
@@ -148,6 +156,7 @@ impl<B: StorageBackend> ArchiveEngine<B> {
                     sequence,
                     prev_hash,
                     nonce,
+                    key_salt: Some(key_salt),
                     created_at,
                     record_count: bucket.records.len() as u32,
                     uncompressed_len,
@@ -212,7 +221,16 @@ impl<B: StorageBackend> ArchiveEngine<B> {
         sequence: u64,
     ) -> Result<Vec<LogRecord>> {
         let chunk = self.backend.get_chunk(service, window, sequence).await?;
-        let compressed = decrypt_chunk(&self.key, chunk.header.nonce, &chunk.ciphertext)?;
+        // Chunks written before ADR-0016 carry no salt and were sealed
+        // directly under the master key.
+        let compressed = match &chunk.header.key_salt {
+            Some(salt) => decrypt_chunk(
+                &self.key.derive_chunk_key(salt)?,
+                chunk.header.nonce,
+                &chunk.ciphertext,
+            )?,
+            None => decrypt_chunk(&self.key, chunk.header.nonce, &chunk.ciphertext)?,
+        };
         let plaintext = decompress(&compressed)?;
         Ok(serde_json::from_slice(&plaintext)?)
     }
@@ -999,5 +1017,55 @@ mod tests {
             .await
             .expect_err("a missing chunk must be caught");
         assert!(err.to_string().contains("missing chunk"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn new_chunks_get_distinct_salts_and_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = engine(&dir);
+        engine.ingest_batch(batch("api", 0, 0, 3)).await.unwrap();
+        engine.ingest_batch(batch("api", 1, 3, 3)).await.unwrap();
+
+        let chunks = engine.service_chunks("api").await.unwrap();
+        let salts: BTreeSet<_> = chunks.iter().map(|c| c.header.key_salt).collect();
+        assert_eq!(salts.len(), 2, "each chunk gets its own salt");
+        assert!(salts.iter().all(Option::is_some));
+
+        let records = engine.query(&IndexQuery::default()).await.unwrap();
+        assert_eq!(ids(&records), (0..6).collect());
+    }
+
+    #[tokio::test]
+    async fn chunks_written_before_adr_0016_still_decrypt_under_the_master_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = engine(&dir);
+
+        // Hand-build a chunk exactly as pre-ADR-0016 code wrote it: no salt,
+        // sealed directly under the master key.
+        let records = batch("api", 0, 0, 2).0;
+        let compressed = compress(&serde_json::to_vec(&records).unwrap(), DEFAULT_LEVEL).unwrap();
+        let nonce = derive_nonce(0, 0);
+        let chunk = Chunk {
+            header: ChunkHeader {
+                service: "api".to_string(),
+                time_window: "1970-01-01-00".to_string(),
+                sequence: 0,
+                prev_hash: GENESIS,
+                nonce,
+                key_salt: None,
+                created_at: records[1].timestamp,
+                record_count: 2,
+                uncompressed_len: 0,
+            },
+            ciphertext: encrypt_chunk(&engine.key, nonce, &compressed).unwrap(),
+        };
+        let index = build_index(chunk.chunk_ref(), &records);
+        engine.backend().put_archive(&chunk, &index).await.unwrap();
+
+        let read = engine
+            .read_records("api", "1970-01-01-00", 0)
+            .await
+            .unwrap();
+        assert_eq!(ids(&read), BTreeSet::from([0, 1]));
     }
 }

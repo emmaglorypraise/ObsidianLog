@@ -213,6 +213,7 @@ mod tests {
                 sequence: 0,          // assigned by the builder
                 prev_hash: [0u8; 32], // assigned by the builder
                 nonce: [0u8; 12],
+                key_salt: None,
                 created_at: DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
                 record_count: 1,
                 uncompressed_len: ciphertext.len() as u64,

@@ -13,6 +13,14 @@
 > else below (AES-256-GCM, per-service counter-based nonces, the rejected HKDF
 > alternative) is unchanged.
 
+> **Amended by [ADR-0016](0016-per-chunk-subkeys.md) (2026-10-16).** The
+> per-service counter turned out not to be enough on its own: a failed manifest
+> write or a restored backup rolls it back and reuses a nonce. Each chunk is
+> now sealed under its own HKDF subkey derived from a random per-chunk salt
+> (the HKDF alternative below, with a random rather than derived salt), so
+> `(key, nonce)` uniqueness no longer depends on the manifest. The
+> counter-derived nonce is kept as defense in depth.
+
 ## Context
 
 Chunks are encrypted client-side, before any data leaves the user's

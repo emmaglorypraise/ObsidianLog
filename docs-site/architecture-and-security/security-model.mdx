@@ -20,7 +20,10 @@ them. ObsidianLog is a **self-hosted, user-controlled** system.
   There is no key escrow and no key transmission.
 - **Authenticated encryption.** AES-256-GCM provides both confidentiality
   and ciphertext integrity. Tampered ciphertext is rejected at decryption
-  time.
+  time. Each chunk is sealed under its own key, derived with HKDF-SHA256
+  from your encryption key and a random per-chunk salt, so a key/nonce pair
+  is never reused, even after a failed write or a restore from backup
+  (ADR-0016).
 - **Append-only storage model.** Chunks are write-once. The storage model
   prevents in-place modification, relying on append-only writes combined
   with indexd-coordinated retrieval and SHA-256 hash chaining for

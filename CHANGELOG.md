@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Fixed AES-256-GCM (key, nonce) reuse when the manifest's per-service
+  sequence counter is rolled back: a failed manifest write followed by the
+  next batch, or restoring `manifest.json` or the whole data directory from
+  an older backup, sealed a new chunk with a nonce already used under the
+  same key. Each chunk is now encrypted under its own HKDF-SHA256 subkey
+  derived from a random per-chunk salt stored in the header (ADR-0016).
+  Existing chunks need no migration and still decrypt and verify. Reported
+  by the Month 3 grant reviewer.
+
+  Upgrade note: binaries from v0.2.1 and earlier can't decrypt chunks
+  written by this version, so don't downgrade after upgrading.
+
 ## [0.2.1] - 2026-09-25
 
 ### Fixed
