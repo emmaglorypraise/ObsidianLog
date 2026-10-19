@@ -202,7 +202,7 @@ impl SiaBackend {
             }
             let newer = best
                 .as_ref()
-                .is_none_or(|b| object.updated_at() >= b.updated_at());
+                .is_none_or(|b| object.updated_at >= b.updated_at);
             if newer {
                 best = Some(object);
             }

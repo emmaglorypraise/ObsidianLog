@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Sia SDK (`sia_storage`, behind the `sia` feature) bumped from 0.10.0 to
+  0.13.1. Objects already uploaded with 0.10 stay readable; new uploads use the
+  SDK's per-slab encryption. Stalled hosts are now dropped after 6 seconds
+  without progress instead of a fixed 90-second deadline.
+
 ### Security
 
 - Fixed AES-256-GCM (key, nonce) reuse when the manifest's per-service
