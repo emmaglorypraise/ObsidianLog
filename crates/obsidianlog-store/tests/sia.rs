@@ -117,7 +117,9 @@ async fn sia_end_to_end_when_indexd_available() {
         assert_eq!(&got, &expected[service], "records must round-trip via Sia");
 
         let chunks = engine.service_chunks(service).await.expect("chunks");
-        assert!(verify_chain(&chunks).is_ok(), "chain must verify");
+        if let Err(e) = verify_chain(&chunks) {
+            panic!("chain must verify: {e:?}");
+        }
         eprintln!(
             "[sia]   {service}: {} records verified, chain intact ({:.1}s elapsed)",
             got.len(),
