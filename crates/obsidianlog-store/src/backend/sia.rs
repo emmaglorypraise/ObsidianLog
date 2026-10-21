@@ -27,7 +27,8 @@ use std::io::Cursor;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use sia_storage::{
-    AppKey, AppMetadata, Builder, DownloadOptions, Object, Sdk, UploadOptions, app_id,
+    AppKey, AppMetadata, Builder, DownloadOptions, Object, ObjectEvent, ObjectsCursor, Sdk,
+    UploadOptions, app_id,
 };
 
 /// Re-exported so callers (the CLI's `init` wizard, the `onboard` example)
@@ -47,6 +48,11 @@ use obsidianlog_core::chunk::{Chunk, ChunkRef};
 use obsidianlog_core::error::{Error, Result};
 use obsidianlog_core::index::ServiceWindowIndex;
 use obsidianlog_core::manifest::Manifest;
+
+/// Events requested per `object_events` page. The indexer pages its object
+/// list (and may cap a page below this), so every scan follows the cursor
+/// until it returns an empty page.
+const EVENTS_PAGE: usize = 500;
 
 /// Application metadata registered with the indexer.
 ///
@@ -183,13 +189,32 @@ impl SiaBackend {
         serde_json::from_slice(&object.metadata).ok()
     }
 
+    /// Every object event for this app key, following the indexer's cursor
+    /// across pages. Reading only the first page silently hides newer objects
+    /// once an account outgrows it — including the latest manifest, which then
+    /// reads as stale and makes ingest reuse a sequence number.
+    async fn all_object_events(&self) -> Result<Vec<ObjectEvent>> {
+        let mut events: Vec<ObjectEvent> = Vec::new();
+        loop {
+            let cursor = events.last().map(|e| ObjectsCursor {
+                after: e.updated_at,
+                id: e.id,
+            });
+            let page = self
+                .sdk
+                .object_events(cursor, Some(EVENTS_PAGE))
+                .await
+                .map_err(|e| Error::Backend(format!("sia list: {e}")))?;
+            if page.is_empty() {
+                return Ok(events);
+            }
+            events.extend(page);
+        }
+    }
+
     /// Find the newest non-deleted object whose metadata path equals `path`.
     async fn find_object(&self, path: &str) -> Result<Option<Object>> {
-        let events = self
-            .sdk
-            .object_events(None, None)
-            .await
-            .map_err(|e| Error::Backend(format!("sia list: {e}")))?;
+        let events = self.all_object_events().await?;
 
         let mut best: Option<Object> = None;
         for event in events {
@@ -275,11 +300,7 @@ impl StorageBackend for SiaBackend {
 
     async fn list_chunks(&self, service: &str, range: Option<TimeRange>) -> Result<Vec<ChunkRef>> {
         let prefix = format!("{}/chunks/{service}/", self.bucket);
-        let events = self
-            .sdk
-            .object_events(None, None)
-            .await
-            .map_err(|e| Error::Backend(format!("sia list: {e}")))?;
+        let events = self.all_object_events().await?;
 
         let mut refs = Vec::new();
         for event in events {
