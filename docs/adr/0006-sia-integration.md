@@ -22,7 +22,7 @@ The entire Sia backend lives in `obsidianlog-store::backend::sia`, compiled only
 under a non-default cargo feature `sia`:
 
 ```toml
-sia_storage = { version = "=0.10.0", optional = true }
+sia_storage = { version = "=0.13.1", optional = true }
 # ...
 [features]
 default = []
@@ -35,8 +35,9 @@ Sia dependency and compile Sia-free. Only `--features sia` brings in
 
 ### Pinned to an exact version
 
-`sia_storage` is pinned to **`=0.10.0`**, not a caret range. Because the SDK is
-pre-1.0, a `^0.10` range would silently accept `0.10.x` — and, worse, tooling
+`sia_storage` is pinned to **`=0.13.1`** (originally `=0.10.0`; see the upgrade
+log below), not a caret range. Because the SDK is pre-1.0, a `^0.13` range would
+silently accept `0.13.x` — and, worse, tooling
 treats pre-1.0 minors as breaking. An exact pin means upgrades are a deliberate,
 reviewed act, never an accidental `cargo update`. (A git-revision pin is the
 alternative if we ever need an unpublished fix; the version pin is preferred
@@ -75,10 +76,21 @@ pre-approved `AppKey`; the interactive first-time approval flow lives in the
   the hash chain. It stays **unrun in CI** — gated behind `--features sia` **and**
   `OBSIDIANLOG_INDEXD_URL`/`OBSIDIANLOG_APP_KEY`, so it skips cleanly without a
   live indexer.
-- **Upgrading deliberately:** bump the `=0.10.0` pin, run
+- **Upgrading deliberately:** bump the exact pin, run
   `cargo build --features sia` and `cargo clippy --all-targets --features sia`,
   re-read the SDK's `CHANGELOG` for breaking changes to the upload/download/object
   APIs used in `sia.rs`, and (with an indexer) run the env-gated integration test
   before merging. Record notable API shifts by superseding this ADR.
 - Objects are encrypted twice (our AES-256-GCM plus the SDK's) — harmless
   defense-in-depth.
+
+## Upgrade log
+
+- **0.10.0 → 0.13.1 (2026-10-19).** The only API change touching `sia.rs` was
+  `Object::updated_at()` becoming a public field (0.11). `sia_mux` must be
+  updated alongside (`cargo update -p sia_mux`): `sia_storage` 0.12+ doesn't
+  compile against the previously locked `sia_mux` 0.1.1. Objects written by
+  0.10 stay readable: their slabs decode as `SlabVersion::V0` and download with
+  the original cipher, while new uploads use per-slab encryption (V1). We never
+  matched on the removed `AppApiError::NotFound`; absence is detected by
+  listing. Still TLS via rustls only.
