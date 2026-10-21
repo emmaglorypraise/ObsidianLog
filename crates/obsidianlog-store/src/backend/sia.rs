@@ -21,8 +21,18 @@
 //! object id in the manifest for direct `Sdk::object` fetch is a future
 //! optimization. Objects are also encrypted by the SDK, on top of our own
 //! AES-256-GCM (defense in depth).
+//!
+//! ## Read-after-write
+//!
+//! The indexer's object list is eventually consistent: an object pinned a
+//! moment ago may not be listed yet. For chunks that only delays visibility,
+//! but a stale manifest would hand the next batch an already-used sequence
+//! and fork the service's hash chain. The backend is a single writer (there
+//! is no cross-process lock for Sia), so it keeps the last manifest it wrote
+//! and serves reads from that copy instead of the listing.
 
 use std::io::Cursor;
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -117,6 +127,10 @@ pub struct SiaConfig {
 pub struct SiaBackend {
     sdk: Sdk,
     bucket: String,
+    /// The last manifest this backend wrote, served by `read_manifest` so a
+    /// write is visible to the next read even before the indexer lists it.
+    /// Boxed to keep `SiaBackend` (and so `AnyBackend`) small.
+    last_manifest: Mutex<Option<Box<Manifest>>>,
 }
 
 /// The JSON envelope stored in each object's `metadata` blob: the object's
@@ -150,6 +164,7 @@ impl SiaBackend {
         Ok(Self {
             sdk,
             bucket: config.bucket,
+            last_manifest: Mutex::new(None),
         })
     }
 
@@ -182,6 +197,14 @@ impl SiaBackend {
             .await
             .map_err(|e| Error::Backend(format!("sia pin: {e}")))?;
         Ok(())
+    }
+
+    fn cached_manifest(&self) -> Option<Manifest> {
+        self.last_manifest
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_deref()
+            .cloned()
     }
 
     /// Parse an object's [`ObjectMeta`] from its metadata blob, if present.
@@ -324,6 +347,9 @@ impl StorageBackend for SiaBackend {
     }
 
     async fn read_manifest(&self) -> Result<Manifest> {
+        if let Some(manifest) = self.cached_manifest() {
+            return Ok(manifest);
+        }
         let bytes = self
             .get_object(&self.manifest_path(), || "manifest".to_string())
             .await?;
@@ -335,6 +361,10 @@ impl StorageBackend for SiaBackend {
             path: self.manifest_path(),
             index: None,
         };
-        self.put_object(&meta, serde_json::to_vec(manifest)?).await
+        self.put_object(&meta, serde_json::to_vec(manifest)?)
+            .await?;
+        *self.last_manifest.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(Box::new(manifest.clone()));
+        Ok(())
     }
 }
