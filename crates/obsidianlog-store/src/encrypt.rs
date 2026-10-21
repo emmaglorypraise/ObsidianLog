@@ -59,7 +59,7 @@ impl EncryptionKey {
     /// Generate a fresh key from the OS CSPRNG.
     pub fn generate() -> Result<Self> {
         let mut bytes = [0u8; KEY_LEN];
-        getrandom::getrandom(&mut bytes)
+        getrandom::fill(&mut bytes)
             .map_err(|e| Error::Crypto(format!("OS CSPRNG unavailable: {e}")))?;
         Ok(Self(bytes))
     }
@@ -100,8 +100,7 @@ impl EncryptionKey {
 /// nothing a backup restore or failed write does can roll it back.
 pub fn generate_salt() -> Result<[u8; SALT_LEN]> {
     let mut salt = [0u8; SALT_LEN];
-    getrandom::getrandom(&mut salt)
-        .map_err(|e| Error::Crypto(format!("OS CSPRNG unavailable: {e}")))?;
+    getrandom::fill(&mut salt).map_err(|e| Error::Crypto(format!("OS CSPRNG unavailable: {e}")))?;
     Ok(salt)
 }
 
