@@ -123,7 +123,8 @@ pub struct SiaBackend {
     bucket: String,
     /// The last manifest this backend wrote, served by `read_manifest` so a
     /// write is visible to the next read even before the indexer lists it.
-    last_manifest: Mutex<Option<Manifest>>,
+    /// Boxed to keep `SiaBackend` (and so `AnyBackend`) small.
+    last_manifest: Mutex<Option<Box<Manifest>>>,
 }
 
 /// The JSON envelope stored in each object's `metadata` blob: the object's
@@ -196,7 +197,8 @@ impl SiaBackend {
         self.last_manifest
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .clone()
+            .as_deref()
+            .cloned()
     }
 
     /// Parse an object's [`ObjectMeta`] from its metadata blob, if present.
@@ -340,7 +342,8 @@ impl StorageBackend for SiaBackend {
         };
         self.put_object(&meta, serde_json::to_vec(manifest)?)
             .await?;
-        *self.last_manifest.lock().unwrap_or_else(|e| e.into_inner()) = Some(manifest.clone());
+        *self.last_manifest.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(Box::new(manifest.clone()));
         Ok(())
     }
 }
