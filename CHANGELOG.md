@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Patched three dependency advisories: `ctutils` 0.4.2 → 0.4.8
+  (RUSTSEC-2026-0385, mask generation that wasn't constant-time, used under
+  `aes-gcm`), `url` 2.5.8 → 2.5.9 (RUSTSEC-2026-0592, stack overflow in
+  `Url::origin()`), and `quinn-udp` 0.5.14 → 0.5.16 (RUSTSEC-2026-0538,
+  receive loop can spin on some BSD and Apple targets).
+
+  Upgrade note: the minimum supported Rust version is now 1.87 (was 1.85),
+  because the patched `ctutils` requires it. This only affects building from
+  source on an older toolchain.
 - Fixed AES-256-GCM (key, nonce) reuse when the manifest's per-service
   sequence counter is rolled back: a failed manifest write followed by the
   next batch, or restoring `manifest.json` or the whole data directory from
