@@ -97,7 +97,11 @@ fn render(records: &[LogRecord], format: OutputFormat) -> Result<()> {
 }
 
 fn render_human(records: &[LogRecord]) -> Result<()> {
-    let colorize = std::io::stdout().is_terminal();
+    let colorize = use_color(
+        std::io::stdout().is_terminal(),
+        anstyle_query::no_color(),
+        enable_ansi,
+    );
     let service_width = records
         .iter()
         .map(|r| r.service.len())
@@ -122,19 +126,10 @@ fn render_human(records: &[LogRecord]) -> Result<()> {
             .timestamp
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let service = &record.service;
-        let level_text = record.level.as_deref().unwrap_or("-");
         let host = record.host.as_deref().unwrap_or("-");
         let message = human_message(&record.raw);
 
-        let level = if colorize {
-            format!(
-                "{}{level_text:<level_width$}{}",
-                level_color(record.level.as_deref()),
-                RESET
-            )
-        } else {
-            format!("{level_text:<level_width$}")
-        };
+        let level = format_level(record.level.as_deref(), level_width, colorize);
 
         println!("{timestamp}  {service:<service_width$}  {level}  {host:<host_width$}  {message}");
     }
@@ -165,6 +160,34 @@ fn human_message(raw: &serde_json::Value) -> String {
         .unwrap_or_else(|| raw.to_string())
 }
 
+/// Whether `--format human` should emit ANSI color codes: only on a
+/// terminal, only when `NO_COLOR` isn't set (<https://no-color.org>), and only
+/// if the terminal can render them. `enable_ansi` is called last, so the
+/// console mode is never touched when output is piped or color is disabled.
+fn use_color(is_terminal: bool, no_color: bool, enable_ansi: impl FnOnce() -> bool) -> bool {
+    is_terminal && !no_color && enable_ansi()
+}
+
+/// Make sure the terminal interprets ANSI escapes. Windows consoles (conhost,
+/// which Windows PowerShell 5.1 runs in) print them as literal text until
+/// `ENABLE_VIRTUAL_TERMINAL_PROCESSING` is turned on; if that fails, fall back
+/// to plain output. Other platforms need nothing.
+fn enable_ansi() -> bool {
+    anstyle_query::windows::enable_ansi_colors().unwrap_or(true)
+}
+
+/// The level column, padded to `width`. When colored, the reset code is only
+/// added if a color was actually set, so unknown or missing levels stay plain.
+fn format_level(level: Option<&str>, width: usize, colorize: bool) -> String {
+    let text = level.unwrap_or("-");
+    let color = if colorize { level_color(level) } else { "" };
+    if color.is_empty() {
+        format!("{text:<width$}")
+    } else {
+        format!("{color}{text:<width$}{RESET}")
+    }
+}
+
 const RESET: &str = "\x1b[0m";
 
 fn level_color(level: Option<&str>) -> &'static str {
@@ -180,6 +203,44 @@ fn level_color(level: Option<&str>) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn use_color_only_on_a_terminal_without_no_color() {
+        assert!(use_color(true, false, || true));
+        assert!(!use_color(false, false, || true));
+        assert!(!use_color(true, true, || true));
+    }
+
+    #[test]
+    fn use_color_falls_back_to_plain_when_ansi_cannot_be_enabled() {
+        assert!(!use_color(true, false, || false));
+    }
+
+    #[test]
+    fn use_color_leaves_the_console_alone_when_piped_or_disabled() {
+        let mut called = false;
+        use_color(false, false, || {
+            called = true;
+            true
+        });
+        use_color(true, true, || {
+            called = true;
+            true
+        });
+        assert!(!called);
+    }
+
+    #[test]
+    fn format_level_colors_known_levels() {
+        assert_eq!(format_level(Some("warn"), 5, true), "\x1b[33mwarn \x1b[0m");
+    }
+
+    #[test]
+    fn format_level_has_no_escapes_without_a_color() {
+        assert_eq!(format_level(None, 5, true), "-    ");
+        assert_eq!(format_level(Some("notice"), 6, true), "notice");
+        assert_eq!(format_level(Some("warn"), 5, false), "warn ");
+    }
 
     fn now() -> DateTime<Utc> {
         DateTime::parse_from_rfc3339("2026-07-28T12:00:00Z")

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `query --format human` printed raw ANSI escapes such as `←[33m` in
+  Windows PowerShell 5.1, because Windows consoles only render them after a
+  program turns on virtual terminal processing. The CLI now turns it on, and
+  prints plain text if the console refuses. It also no longer writes a reset
+  code after a level that has no color, and it honours `NO_COLOR`
+  (#131).
+
 ### Changed
 
 - Sia SDK (`sia_storage`, behind the `sia` feature) bumped from 0.10.0 to

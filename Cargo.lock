@@ -1870,6 +1870,7 @@ dependencies = [
 name = "obsidianlog-cli"
 version = "0.2.1"
 dependencies = [
+ "anstyle-query",
  "anyhow",
  "chrono",
  "clap",
