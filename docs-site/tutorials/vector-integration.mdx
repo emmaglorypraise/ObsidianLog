@@ -159,8 +159,17 @@ actually watching the file, not just reading it once:
   </Tab>
   <Tab title="Windows">
     ```powershell
-    '{"timestamp":"2026-09-19T10:05:00Z","service":"vector-tutorial","level":"warn","msg":"a second line, sent live"}' | Add-Content -Encoding ascii app.log
+    $line = '{"timestamp":"2026-09-19T10:05:00Z","service":"vector-tutorial","level":"warn","msg":"a second line, sent live"}'
+    $fs = [System.IO.File]::Open("$PWD\app.log", 'Append', 'Write', 'ReadWrite')
+    $sw = New-Object System.IO.StreamWriter($fs, (New-Object System.Text.UTF8Encoding($false)))
+    $sw.WriteLine($line); $sw.Close()
     ```
+
+    This isn't `Add-Content` like step 4, because Vector now has `app.log`
+    open. In Windows PowerShell 5.1, the default Windows shell, `Add-Content`
+    won't share the file with another process and fails with "being used by
+    another process". Opening the file with `FileShare.ReadWrite` lets the
+    append go through alongside Vector.
   </Tab>
 </Tabs>
 
