@@ -220,6 +220,36 @@ impl StorageBackend for LocalBackend {
         Ok(refs)
     }
 
+    async fn list_services(&self) -> Result<Vec<String>> {
+        // Read from the same index directories `list_chunks` reads, so a
+        // service is listed exactly when `list_chunks` would return chunks for it.
+        let entries = match fs::read_dir(self.bucket_dir().join("index")) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(Error::Io(e)),
+        };
+
+        let mut services = Vec::new();
+        for entry in entries {
+            let entry = entry.map_err(Error::Io)?;
+            if !entry.file_type().map_err(Error::Io)?.is_dir() {
+                continue;
+            }
+            let Ok(name) = entry.file_name().into_string() else {
+                continue;
+            };
+            let has_index = fs::read_dir(entry.path())
+                .map_err(Error::Io)?
+                .filter_map(|e| e.ok())
+                .any(|e| e.path().extension().and_then(|x| x.to_str()) == Some("idx"));
+            if has_index {
+                services.push(name);
+            }
+        }
+        services.sort();
+        Ok(services)
+    }
+
     async fn read_manifest(&self) -> Result<Manifest> {
         let bytes = read_file(&self.manifest_path(), || "manifest".to_string())?;
         Ok(serde_json::from_slice(&bytes)?)

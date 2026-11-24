@@ -66,6 +66,17 @@ pub trait StorageBackend: Send + Sync {
     /// List chunk references for `service`, optionally restricted to `range`.
     async fn list_chunks(&self, service: &str, range: Option<TimeRange>) -> Result<Vec<ChunkRef>>;
 
+    /// List every service with at least one stored chunk, whether or not the
+    /// manifest records it, sorted and without duplicates.
+    ///
+    /// `verify` uses this to find services the manifest has lost entirely
+    /// (ADR-0017). The default returns an empty list, meaning the backend
+    /// can't enumerate its services: `verify` then still reconciles each
+    /// service the manifest knows, but can't report one it has forgotten.
+    async fn list_services(&self) -> Result<Vec<String>> {
+        Ok(Vec::new())
+    }
+
     /// Read the root manifest.
     async fn read_manifest(&self) -> Result<Manifest>;
 

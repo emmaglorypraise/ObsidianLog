@@ -25,6 +25,7 @@ We follow the lightweight [Michael Nygard format](https://cognitect.com/blog/201
 - [0014 — Advisory lock enforces the single-writer assumption per data directory](0014-single-writer-advisory-lock.md)
 - [0015 — One bundled credential item for single-prompt setup](0015-bundled-credential-single-prompt-setup.md)
 - [0016 — Per-chunk subkeys so nonce safety doesn't depend on the manifest](0016-per-chunk-subkeys.md)
+- [0017 — `verify` reconciles the backend's contents with the manifest](0017-verify-reconciles-backend-with-manifest.md)
 
 ## Adding an ADR
 

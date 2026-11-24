@@ -23,6 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   batch that started right after another could read the older manifest and
   fork the hash chain the same way. The Sia backend now serves the manifest
   it last wrote instead of the listing (#125).
+- `verify` only checked the chunks the manifest listed, so a chunk the
+  manifest had forgotten was invisible to it, for example after the manifest
+  was rolled back or restored from an older backup. It now also lists what
+  is actually stored and fails on a chunk the manifest doesn't list, two
+  stored chunks claiming one sequence number (a forked chain), chunks stored
+  for a service the manifest has lost, and a key and nonce reused anywhere in
+  the archive (ADR-0017). Library users get a new
+  `StorageBackend::list_services` method, with a default implementation, and
+  a new `ArchiveMismatch` error type. Raised in the Month 3 grant review.
+
+  Upgrade note: an archive that verified clean before can now fail, but only
+  if storage really holds chunks the manifest doesn't describe.
 
 ### Changed
 
