@@ -36,6 +36,10 @@ dialoguer = "0.12"
 chrono = { version = "0.4.39", default-features = false, features = ["serde", "std", "clock"] }
 # Driving the async ArchiveEngine::query from the sync CLI (one-shot, single-threaded).
 tokio = { version = "1.52.3", features = ["rt"] }
+# `NO_COLOR` detection and enabling ANSI escapes on Windows consoles for
+# `query --format human`. Already present transitively via clap, so this adds
+# no new supply-chain surface.
+anstyle-query = "1.1.5"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Direct access to the macOS Keychain's create-only write (ADR-0015): the

@@ -18,7 +18,7 @@ actually match.
 | `--level <LEVEL>` | Filter by log level (e.g. `info`, `warn`, `error`). |
 | `--host <HOST>` | Filter by originating host. |
 | `--keyword <TEXT>` | Free-text keyword to match within log lines. |
-| `--format <FORMAT>` | Output format: `human` (default, colorized terminal output), `json` (pretty-printed structured array), or `raw` (one decrypted JSON object per line, for piping to `jq`). |
+| `--format <FORMAT>` | Output format: `human` (default, colorized terminal output; plain when piped or when `NO_COLOR` is set), `json` (pretty-printed structured array), or `raw` (one decrypted JSON object per line, for piping to `jq`). |
 
 Plus the global [`--config <FILE>`](/cli/overview#global-flags). All filters
 compose, and matching is exact per field.
