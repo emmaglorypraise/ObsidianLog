@@ -139,6 +139,151 @@ impl From<ChainBreak> for obsidianlog_core::Error {
     }
 }
 
+/// A disagreement between what the backend stores and what the manifest
+/// records, found by reconciling the two (ADR-0017).
+///
+/// Separate from [`ChainBreak`]: a chain can be internally intact while the
+/// backend holds chunks the manifest doesn't describe.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ArchiveMismatch {
+    /// Chunks are stored that the manifest's chunk list doesn't include, for
+    /// example after the manifest was rolled back. `window` and `sequence`
+    /// name the first one; `count` is how many there are in total.
+    Unlisted {
+        /// Time window of the first unlisted chunk.
+        window: String,
+        /// Sequence number of the first unlisted chunk.
+        sequence: u64,
+        /// Number of unlisted chunks for the service.
+        count: usize,
+    },
+    /// More than one stored chunk claims the same sequence number: the chain
+    /// has forked.
+    DuplicateSequence {
+        /// The sequence number claimed more than once.
+        sequence: u64,
+        /// How many stored chunks claim it.
+        count: usize,
+    },
+    /// Chunks are stored for a service the manifest has no record of.
+    UnknownService {
+        /// Number of chunks stored for the service.
+        count: usize,
+    },
+    /// Two chunks were sealed under the same key with the same nonce.
+    NonceReuse {
+        /// Sequence number of this service's chunk.
+        sequence: u64,
+        /// Service of the other chunk (may be the same service).
+        other_service: String,
+        /// Sequence number of the other chunk.
+        other_sequence: u64,
+    },
+}
+
+impl std::fmt::Display for ArchiveMismatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unlisted {
+                window,
+                sequence,
+                count,
+            } => {
+                write!(
+                    f,
+                    "chunk stored on the backend but missing from the manifest \
+                     (window {window}, sequence {sequence})"
+                )?;
+                if *count > 1 {
+                    write!(f, ", and {} more", count - 1)?;
+                }
+                Ok(())
+            }
+            Self::DuplicateSequence { sequence, count } => write!(
+                f,
+                "{count} stored chunks claim sequence {sequence}: the chain has forked"
+            ),
+            Self::UnknownService { count } => write!(
+                f,
+                "{count} chunk(s) stored for this service, but the manifest has no record of it"
+            ),
+            Self::NonceReuse {
+                sequence,
+                other_service,
+                other_sequence,
+            } => write!(
+                f,
+                "chunk at sequence {sequence} reuses the key and nonce of \
+                 {other_service} sequence {other_sequence}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ArchiveMismatch {}
+
+impl From<ArchiveMismatch> for obsidianlog_core::Error {
+    fn from(mismatch: ArchiveMismatch) -> Self {
+        obsidianlog_core::Error::ChainIntegrity(mismatch.to_string())
+    }
+}
+
+/// Compare a service's stored chunks (`stored`, as listed by the backend)
+/// with the manifest's chunk list (`listed`). Returns the first problem found:
+/// a sequence claimed more than once, then chunks the manifest doesn't list.
+///
+/// Chunks the manifest lists but storage lacks aren't reported here; fetching
+/// them during chain verification already reports them as missing.
+pub fn reconcile_listing(
+    listed: &[obsidianlog_core::chunk::ChunkRef],
+    stored: &[obsidianlog_core::chunk::ChunkRef],
+) -> Result<(), ArchiveMismatch> {
+    let mut per_sequence: BTreeMap<u64, usize> = BTreeMap::new();
+    for chunk in stored {
+        *per_sequence.entry(chunk.sequence).or_default() += 1;
+    }
+    if let Some((&sequence, &count)) = per_sequence.iter().find(|&(_, &n)| n > 1) {
+        return Err(ArchiveMismatch::DuplicateSequence { sequence, count });
+    }
+
+    let unlisted: Vec<_> = stored.iter().filter(|c| !listed.contains(c)).collect();
+    if let Some(first) = unlisted.iter().min_by_key(|c| c.sequence) {
+        return Err(ArchiveMismatch::Unlisted {
+            window: first.window.clone(),
+            sequence: first.sequence,
+            count: unlisted.len(),
+        });
+    }
+    Ok(())
+}
+
+/// The key a chunk was sealed under plus its nonce: two chunks sharing this
+/// pair reused an AES-GCM (key, nonce) pair. `key_salt` identifies the
+/// per-chunk subkey (ADR-0016); `None` means the master key, used by chunks
+/// written before ADR-0016.
+pub type NonceKey = (Option<[u8; 32]>, [u8; 12]);
+
+/// Find the first reused (key, nonce) pair among `seen`, given as
+/// `(service, sequence, key)` in verification order. Returns the later chunk's
+/// service and sequence, plus the earlier chunk's.
+pub fn find_nonce_reuse(
+    seen: &[(String, u64, NonceKey)],
+) -> Option<((String, u64), (String, u64))> {
+    let mut first_use: std::collections::HashMap<NonceKey, (&str, u64)> =
+        std::collections::HashMap::new();
+    for (service, sequence, key) in seen {
+        if let Some(&(other_service, other_sequence)) = first_use.get(key) {
+            return Some((
+                (service.clone(), *sequence),
+                (other_service.to_string(), other_sequence),
+            ));
+        }
+        first_use.insert(*key, (service.as_str(), *sequence));
+    }
+    None
+}
+
 /// Verify that `chunks` form an intact chain for a single service.
 ///
 /// The slice must be one service's chunks in chain order, starting at the
@@ -273,5 +418,67 @@ mod tests {
         let err = verify_chain(&chunks).expect_err("a reorder must be caught");
         assert_eq!(err.kind, ChainBreakKind::Reordered);
         assert_eq!(err.position, 1);
+    }
+
+    fn chunk_ref(window: &str, sequence: u64) -> obsidianlog_core::chunk::ChunkRef {
+        obsidianlog_core::chunk::ChunkRef {
+            service: "api".to_string(),
+            window: window.to_string(),
+            sequence,
+        }
+    }
+
+    #[test]
+    fn reconcile_accepts_a_listing_that_matches_the_manifest() {
+        let refs = [chunk_ref("w0", 0), chunk_ref("w1", 1)];
+        assert_eq!(reconcile_listing(&refs, &refs), Ok(()));
+    }
+
+    #[test]
+    fn reconcile_reports_the_first_unlisted_chunk_and_the_count() {
+        let listed = [chunk_ref("w0", 0)];
+        let stored = [chunk_ref("w0", 0), chunk_ref("w2", 2), chunk_ref("w1", 1)];
+        assert_eq!(
+            reconcile_listing(&listed, &stored),
+            Err(ArchiveMismatch::Unlisted {
+                window: "w1".to_string(),
+                sequence: 1,
+                count: 2,
+            })
+        );
+    }
+
+    #[test]
+    fn reconcile_reports_a_sequence_claimed_twice_before_unlisted_chunks() {
+        let listed = [chunk_ref("w0", 0)];
+        let stored = [chunk_ref("w0", 0), chunk_ref("w9", 0)];
+        assert_eq!(
+            reconcile_listing(&listed, &stored),
+            Err(ArchiveMismatch::DuplicateSequence {
+                sequence: 0,
+                count: 2,
+            })
+        );
+    }
+
+    #[test]
+    fn nonce_reuse_is_judged_per_key() {
+        let nonce = [7u8; 12];
+        // Same nonce under two different per-chunk subkeys: not a reuse.
+        let distinct_keys = [
+            ("api".to_string(), 0, (Some([1u8; 32]), nonce)),
+            ("web".to_string(), 0, (Some([2u8; 32]), nonce)),
+        ];
+        assert_eq!(find_nonce_reuse(&distinct_keys), None);
+
+        // Same nonce under the master key (chunks from before ADR-0016): reuse.
+        let master_key = [
+            ("api".to_string(), 0, (None, nonce)),
+            ("web".to_string(), 3, (None, nonce)),
+        ];
+        assert_eq!(
+            find_nonce_reuse(&master_key),
+            Some((("web".to_string(), 3), ("api".to_string(), 0)))
+        );
     }
 }

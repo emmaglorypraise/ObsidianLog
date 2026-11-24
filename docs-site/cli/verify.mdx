@@ -28,6 +28,19 @@ chunks, fetches every one, and checks that:
    commits to the newest chunk, so its hash is checked against the head
    hash recorded in the manifest. A mismatch is reported as a head hash
    mismatch.
+5. **Storage holds nothing the manifest doesn't describe.** `verify` also
+   lists what's actually stored for the service and compares it with the
+   manifest. A stored chunk the manifest doesn't list (for example, after
+   the manifest was rolled back or restored from an older backup) fails, and
+   so do two stored chunks claiming the same sequence number (a forked chain).
+
+Across the whole archive, `verify` also:
+
+- **Finds services the manifest has lost.** A service with chunks in
+  storage but no entry in the manifest is reported as a failure, not
+  skipped.
+- **Checks that no two chunks were encrypted with the same key and nonce.**
+  If two chunks share both, both services are reported.
 
 So it checks both content and order, not just content.
 
@@ -37,14 +50,14 @@ So it checks both content and order, not just content.
   can't tell whether a chunk decrypts. That check happens in
   [`query`](/cli/query): AES-256-GCM authenticates every chunk, and a chunk
   altered without the key fails to decrypt.
-- **Whether the manifest itself was rolled back.** The manifest is the
-  record of what should exist, and `verify` reads it from the same storage
-  as the chunks. Someone who can write to both could delete a service's
-  newest chunks and edit the manifest to match, and `verify` would still
-  pass. They couldn't add or alter logs without your key, but they could
-  drop the most recent ones. To catch that, keep `verify`'s output from
-  regular runs somewhere else, such as CI logs. A service's chunk count
-  should only ever go up.
+- **Newest chunks deleted together with a matching manifest.** A rolled-back
+  manifest is caught while the newer chunks are still in storage (check 5).
+  But someone who can write to both could delete a service's newest chunks
+  **and** edit the manifest to match, and `verify` would still pass. They
+  couldn't add or alter logs without your key, but they could drop the most
+  recent ones. To catch that, keep `verify`'s output from regular runs
+  somewhere else, such as CI logs. A service's chunk count should only ever
+  go up.
 
 ## Flags
 
@@ -73,6 +86,7 @@ obsidianlog verify
 obsidianlog verify --service api
 ```
 
-For a chain that fails, `verify` prints which service and where the break
-was detected (a missing chunk, a corrupted chunk, or a head mismatch),
-rather than just a pass/fail.
+For a chain that fails, `verify` prints which service and what was found (a
+missing, modified or reordered chunk, a head mismatch, a chunk missing from
+the manifest, a forked sequence, an unknown service, or a reused key and
+nonce), rather than just a pass/fail.

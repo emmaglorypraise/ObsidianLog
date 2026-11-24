@@ -346,6 +346,31 @@ impl StorageBackend for SiaBackend {
         Ok(refs)
     }
 
+    async fn list_services(&self) -> Result<Vec<String>> {
+        let prefix = format!("{}/chunks/", self.bucket);
+        let events = self.all_object_events().await?;
+
+        // Take the service from the index each chunk object carries, not by
+        // parsing the path, so the name is exactly what `list_chunks` matches on.
+        let mut services = std::collections::BTreeSet::new();
+        for event in events {
+            if event.deleted {
+                continue;
+            }
+            let Some(object) = event.object else { continue };
+            let Some(meta) = Self::object_meta(&object) else {
+                continue;
+            };
+            if !meta.path.starts_with(&prefix) {
+                continue;
+            }
+            if let Some(index) = meta.index {
+                services.insert(index.chunk.service);
+            }
+        }
+        Ok(services.into_iter().collect())
+    }
+
     async fn read_manifest(&self) -> Result<Manifest> {
         if let Some(manifest) = self.cached_manifest() {
             return Ok(manifest);

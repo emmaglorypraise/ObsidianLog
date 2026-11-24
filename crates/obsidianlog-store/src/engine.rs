@@ -36,7 +36,10 @@ use obsidianlog_core::manifest::{Manifest, ManifestServiceChain};
 use obsidianlog_core::record::{LogBatch, LogRecord};
 use obsidianlog_core::types::GENESIS;
 
-use crate::chain::{ChainBreak, ChainBreakKind, compute_chunk_hash, verify_chain};
+use crate::chain::{
+    ArchiveMismatch, ChainBreak, ChainBreakKind, NonceKey, compute_chunk_hash, find_nonce_reuse,
+    reconcile_listing, verify_chain,
+};
 use crate::chunking::{DEFAULT_WINDOW_SECS, chunk_batch, window_bounds};
 use crate::compress::{DEFAULT_LEVEL, compress, decompress};
 use crate::encrypt::{EncryptionKey, decrypt_chunk, derive_nonce, encrypt_chunk, generate_salt};
@@ -325,6 +328,12 @@ impl<B: StorageBackend> ArchiveEngine<B> {
     /// manifest's recorded head hash — the one thing nothing within the chain
     /// itself commits to.
     ///
+    /// It then reconciles the backend's own listing with the manifest
+    /// (ADR-0017): a sequence claimed by more than one stored chunk, a stored
+    /// chunk the manifest doesn't list, or chunks stored for a service the
+    /// manifest doesn't know all fail, as does a (key, nonce) pair reused
+    /// within the service.
+    ///
     /// The chain is defined entirely over encrypted bytes, so this never
     /// decrypts and doesn't need the archive's encryption key. Returns the
     /// number of chunks verified. A chunk the manifest references but storage
@@ -332,8 +341,36 @@ impl<B: StorageBackend> ArchiveEngine<B> {
     /// manifest position — the first break found is returned.
     pub async fn verify_service(&self, service: &str) -> Result<usize> {
         let manifest = self.read_manifest_or_default().await?;
+        let (count, keys) = self.verify_service_in(&manifest, service).await?;
+        if let Some(((_, sequence), (other_service, other_sequence))) = find_nonce_reuse(&keys) {
+            return Err(ArchiveMismatch::NonceReuse {
+                sequence,
+                other_service,
+                other_sequence,
+            }
+            .into());
+        }
+        Ok(count)
+    }
+
+    /// Every per-service check of [`Self::verify_service`] against an
+    /// already-read `manifest`, returning the number of chunks verified and
+    /// each verified chunk's `(service, sequence, (key, nonce))` for the nonce
+    /// check, which [`Self::verify_all`] runs across the whole archive.
+    async fn verify_service_in(
+        &self,
+        manifest: &Manifest,
+        service: &str,
+    ) -> Result<(usize, Vec<(String, u64, NonceKey)>)> {
+        let stored = self.backend.list_chunks(service, None).await?;
         let Some(chain) = manifest.services.get(service) else {
-            return Ok(0);
+            if stored.is_empty() {
+                return Ok((0, Vec::new()));
+            }
+            return Err(ArchiveMismatch::UnknownService {
+                count: stored.len(),
+            }
+            .into());
         };
 
         let mut chunks = Vec::with_capacity(chain.chunks.len());
@@ -370,17 +407,72 @@ impl<B: StorageBackend> ArchiveEngine<B> {
             }
         }
 
-        Ok(chunks.len())
+        reconcile_listing(&chain.chunks, &stored)?;
+
+        let keys = chunks
+            .iter()
+            .map(|c| {
+                (
+                    service.to_string(),
+                    c.header.sequence,
+                    (c.header.key_salt, c.header.nonce),
+                )
+            })
+            .collect();
+        Ok((chunks.len(), keys))
     }
 
-    /// Verify every service present in the manifest. Returns `(service,
-    /// result)` pairs sorted by service name; every service is checked even if
-    /// an earlier one fails, so a single run surfaces every broken chain.
+    /// Verify every service in the manifest, plus any service the backend
+    /// stores chunks for that the manifest has lost (ADR-0017). Returns
+    /// `(service, result)` pairs sorted by service name; every service is
+    /// checked even if an earlier one fails, so a single run surfaces every
+    /// broken chain.
+    ///
+    /// Also checks the whole archive for a reused (key, nonce) pair. The first
+    /// reuse found fails both services involved (or the one service, if both
+    /// chunks belong to it), unless they already failed for another reason.
     pub async fn verify_all(&self) -> Result<Vec<(String, Result<usize>)>> {
         let manifest = self.read_manifest_or_default().await?;
-        let mut results = Vec::with_capacity(manifest.services.len());
-        for service in manifest.services.keys() {
-            results.push((service.clone(), self.verify_service(service).await));
+        let mut services: BTreeSet<String> = manifest.services.keys().cloned().collect();
+        services.extend(self.backend.list_services().await?);
+
+        let mut results = Vec::with_capacity(services.len());
+        let mut seen = Vec::new();
+        for service in services {
+            let result = match self.verify_service_in(&manifest, &service).await {
+                Ok((count, keys)) => {
+                    seen.extend(keys);
+                    Ok(count)
+                }
+                Err(e) => Err(e),
+            };
+            results.push((service, result));
+        }
+
+        if let Some(((service, sequence), (other_service, other_sequence))) =
+            find_nonce_reuse(&seen)
+        {
+            for (name, result) in &mut results {
+                if result.is_err() {
+                    continue;
+                }
+                let mismatch = if *name == service {
+                    ArchiveMismatch::NonceReuse {
+                        sequence,
+                        other_service: other_service.clone(),
+                        other_sequence,
+                    }
+                } else if *name == other_service {
+                    ArchiveMismatch::NonceReuse {
+                        sequence: other_sequence,
+                        other_service: service.clone(),
+                        other_sequence: sequence,
+                    }
+                } else {
+                    continue;
+                };
+                *result = Err(mismatch.into());
+            }
         }
         Ok(results)
     }
@@ -1017,6 +1109,170 @@ mod tests {
             .await
             .expect_err("a missing chunk must be caught");
         assert!(err.to_string().contains("missing chunk"), "{err}");
+    }
+
+    fn index_file_path(
+        dir: &tempfile::TempDir,
+        service: &str,
+        window: &str,
+        sequence: u64,
+    ) -> std::path::PathBuf {
+        dir.path()
+            .join("obsidianlog")
+            .join("index")
+            .join(service)
+            .join(format!("{window}-{sequence}.idx"))
+    }
+
+    #[tokio::test]
+    async fn verify_catches_chunks_hidden_by_a_rolled_back_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        seed_query_fixture(&dir).await;
+        let backend = LocalBackend::new(dir.path(), "obsidianlog");
+
+        // Roll api's manifest entry back one chunk, consistently: drop the last
+        // ref and point the head at the new last chunk. The remaining chain is
+        // internally intact, so only reconciling with storage can notice.
+        let mut manifest = backend.read_manifest().await.unwrap();
+        let chain = manifest.services.get_mut("api").unwrap();
+        chain.chunks.pop();
+        let new_last = chain.chunks.last().unwrap().clone();
+        let new_head = backend
+            .get_chunk("api", &new_last.window, new_last.sequence)
+            .await
+            .unwrap();
+        chain.head_hash = compute_chunk_hash(&new_head);
+        chain.next_sequence = 2;
+        backend.write_manifest(&manifest).await.unwrap();
+
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+        let err = engine
+            .verify_service("api")
+            .await
+            .expect_err("a chunk the manifest forgot must be caught");
+        let message = err.to_string();
+        assert!(
+            message.contains("missing from the manifest")
+                && message.contains("1970-01-01-02")
+                && message.contains("sequence 2"),
+            "must name the unlisted chunk: {message}"
+        );
+
+        let results = engine.verify_all().await.unwrap();
+        assert!(results.iter().find(|(s, _)| s == "api").unwrap().1.is_err());
+        assert!(results.iter().find(|(s, _)| s == "web").unwrap().1.is_ok());
+    }
+
+    #[tokio::test]
+    async fn verify_catches_two_stored_chunks_claiming_one_sequence() {
+        let dir = tempfile::tempdir().unwrap();
+        seed_query_fixture(&dir).await;
+
+        // A forked chain: a second stored chunk for api claims sequence 2, in
+        // a different window. The manifest still lists only the original.
+        let original = index_file_path(&dir, "api", "1970-01-01-02", 2);
+        let mut index: ServiceWindowIndex =
+            serde_json::from_slice(&std::fs::read(&original).unwrap()).unwrap();
+        index.chunk.window = "1970-01-01-03".to_string();
+        std::fs::write(
+            index_file_path(&dir, "api", "1970-01-01-03", 2),
+            serde_json::to_vec(&index).unwrap(),
+        )
+        .unwrap();
+        std::fs::copy(
+            chunk_file_path(&dir, "api", "1970-01-01-02", 2),
+            chunk_file_path(&dir, "api", "1970-01-01-03", 2),
+        )
+        .unwrap();
+
+        let backend = LocalBackend::new(dir.path(), "obsidianlog");
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+        let err = engine
+            .verify_service("api")
+            .await
+            .expect_err("a forked sequence must be caught");
+        assert!(
+            err.to_string().contains("2 stored chunks claim sequence 2"),
+            "{err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn verify_reports_a_service_the_manifest_lost() {
+        let dir = tempfile::tempdir().unwrap();
+        seed_query_fixture(&dir).await;
+        let backend = LocalBackend::new(dir.path(), "obsidianlog");
+        assert_eq!(
+            backend.list_services().await.unwrap(),
+            vec!["api".to_string(), "web".to_string()]
+        );
+
+        let mut manifest = backend.read_manifest().await.unwrap();
+        manifest.services.remove("web");
+        backend.write_manifest(&manifest).await.unwrap();
+
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+        let err = engine
+            .verify_service("web")
+            .await
+            .expect_err("chunks for an unknown service must not verify as empty");
+        assert!(
+            err.to_string()
+                .contains("3 chunk(s) stored for this service, but the manifest has no record"),
+            "{err}"
+        );
+
+        // verify_all finds it from the backend's own listing, not the manifest.
+        let results = engine.verify_all().await.unwrap();
+        assert_eq!(results.len(), 2, "web must still be reported: {results:?}");
+        assert!(results.iter().find(|(s, _)| s == "api").unwrap().1.is_ok());
+        assert!(results.iter().find(|(s, _)| s == "web").unwrap().1.is_err());
+    }
+
+    #[tokio::test]
+    async fn verify_all_catches_a_key_and_nonce_reused_across_services() {
+        let dir = tempfile::tempdir().unwrap();
+        seed_query_fixture(&dir).await;
+
+        // Copy api's stored chunks and its manifest entry under a second name.
+        // Each chain is intact on its own, but every chunk now shares its
+        // (key, nonce) pair with one in the other service.
+        let bucket = dir.path().join("obsidianlog");
+        for kind in ["chunks", "index"] {
+            let to = bucket.join(kind).join("api-copy");
+            std::fs::create_dir_all(&to).unwrap();
+            for entry in std::fs::read_dir(bucket.join(kind).join("api")).unwrap() {
+                let from = entry.unwrap().path();
+                std::fs::copy(&from, to.join(from.file_name().unwrap())).unwrap();
+            }
+        }
+        let backend = LocalBackend::new(dir.path(), "obsidianlog");
+        let mut manifest = backend.read_manifest().await.unwrap();
+        let copy = manifest.services["api"].clone();
+        manifest.services.insert("api-copy".to_string(), copy);
+        backend.write_manifest(&manifest).await.unwrap();
+
+        let engine = ArchiveEngine::new(backend, EncryptionKey::new([0x24; 32]), "obsidianlog");
+        // Within one service there's no reuse, so each passes on its own...
+        assert!(engine.verify_service("api").await.is_ok());
+        assert!(engine.verify_service("api-copy").await.is_ok());
+
+        // ...but across the archive both are reported.
+        let results = engine.verify_all().await.unwrap();
+        for service in ["api", "api-copy"] {
+            let err = results
+                .iter()
+                .find(|(s, _)| s == service)
+                .unwrap()
+                .1
+                .as_ref()
+                .expect_err("nonce reuse must fail both services");
+            assert!(
+                err.to_string().contains("reuses the key and nonce"),
+                "{service}: {err}"
+            );
+        }
+        assert!(results.iter().find(|(s, _)| s == "web").unwrap().1.is_ok());
     }
 
     #[tokio::test]

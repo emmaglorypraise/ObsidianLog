@@ -93,6 +93,14 @@ impl StorageBackend for AnyBackend {
         }
     }
 
+    async fn list_services(&self) -> Result<Vec<String>> {
+        match self {
+            Self::Local(b) => b.list_services().await,
+            #[cfg(feature = "sia")]
+            Self::Sia(b) => b.list_services().await,
+        }
+    }
+
     async fn read_manifest(&self) -> Result<Manifest> {
         match self {
             Self::Local(b) => b.read_manifest().await,
@@ -130,6 +138,7 @@ mod tests {
         assert_eq!(fetched, manifest);
 
         assert!(backend.list_chunks("api", None).await.unwrap().is_empty());
+        assert!(backend.list_services().await.unwrap().is_empty());
         assert!(matches!(
             backend.get_chunk("api", "no-such-window", 0).await,
             Err(obsidianlog_core::Error::NotFound(_))
