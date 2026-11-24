@@ -89,6 +89,10 @@ binaries aren't code-signed today:
     ```sh
     xattr -d com.apple.quarantine obsidianlog obsidianlog-ingest
     ```
+    If it prints `No such xattr: com.apple.quarantine`, that's fine. The
+    flag was never set, or it's already cleared (for example, because you
+    ran this command before), so there's nothing to remove.
+
     Prefer the GUI instead? The order matters here: right-click
     `obsidianlog` in Finder and choose **Open** once (this attempt gets
     blocked, that's expected, it's what registers the binary with macOS).
