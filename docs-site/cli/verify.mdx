@@ -8,6 +8,44 @@ it's intact, proof that nothing archived has been modified, reordered,
 or removed since it was written. It never decrypts log content to do
 this.
 
+## What it checks
+
+For each service, `verify` reads the manifest's list of that service's
+chunks, fetches every one, and checks that:
+
+1. **Every chunk the manifest lists exists.** A chunk deleted from storage
+   is reported as a missing chunk.
+2. **Sequence numbers run without gaps or swaps.** Each chunk records its
+   position in the chain, so a gap is reported as a missing chunk and
+   swapped chunks as reordered chunks.
+3. **Each chunk links to the one before it.** Every chunk stores the
+   SHA-256 hash of its predecessor, and the first chunk links to an
+   all-zero genesis hash. The hash covers the chunk's whole header
+   (service, time window, sequence, previous hash, nonce, key salt,
+   creation time, record count and size) and its encrypted content, so changing
+   even one byte of an earlier chunk is reported as a modified chunk.
+4. **The newest chunk matches the manifest.** Nothing later in the chain
+   commits to the newest chunk, so its hash is checked against the head
+   hash recorded in the manifest. A mismatch is reported as a head hash
+   mismatch.
+
+So it checks both content and order, not just content.
+
+## What it doesn't check
+
+- **Whether the content decrypts.** `verify` doesn't need your key, so it
+  can't tell whether a chunk decrypts. That check happens in
+  [`query`](/cli/query): AES-256-GCM authenticates every chunk, and a chunk
+  altered without the key fails to decrypt.
+- **Whether the manifest itself was rolled back.** The manifest is the
+  record of what should exist, and `verify` reads it from the same storage
+  as the chunks. Someone who can write to both could delete a service's
+  newest chunks and edit the manifest to match, and `verify` would still
+  pass. They couldn't add or alter logs without your key, but they could
+  drop the most recent ones. To catch that, keep `verify`'s output from
+  regular runs somewhere else, such as CI logs. A service's chunk count
+  should only ever go up.
+
 ## Flags
 
 | Flag | Description |

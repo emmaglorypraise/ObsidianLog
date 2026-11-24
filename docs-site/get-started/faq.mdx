@@ -51,3 +51,21 @@ Each archive contains two binaries directly: `obsidianlog` (the CLI) and
 and no dependencies to install separately. See
 [Installing a release binary](/get-started/quickstart#installing-a-release-binary)
 for what to do once you've downloaded the right file.
+
+## Is the storage format stable across versions?
+
+Not formally yet. ObsidianLog is pre-1.0, so the on-disk format can still
+change between releases. When it does, the
+[CHANGELOG](https://github.com/emmaglorypraise/ObsidianLog/blob/main/CHANGELOG.md)
+says so with an upgrade note. The aim is that a newer release always reads
+archives written by older ones. Here's how it has gone so far:
+
+| Upgrade | Can the newer release read your existing archive? |
+| --- | --- |
+| 0.1.x → 0.2.0 | No. The chunks didn't change, but key storage did, and moving to 0.2 means generating a new encryption key with `obsidianlog init --force`. To keep reading 0.1.x archives, stay on v0.1.1. |
+| 0.2.0 → 0.2.1 | Yes, no changes needed. |
+| 0.2.1 → next release | Yes, no migration. But new chunks use per-chunk keys that v0.2.1 and earlier can't decrypt, so don't downgrade after upgrading. |
+
+To check an archive after any upgrade, run
+[`obsidianlog verify`](/cli/verify) and then a
+[`query`](/cli/query) that returns your older logs.
