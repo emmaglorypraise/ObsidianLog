@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prints plain text if the console refuses. It also no longer writes a reset
   code after a level that has no color, and it honours `NO_COLOR`
   (#131).
+- Sia backend: only the first page of the indexer's object list was read.
+  Once an account outgrew that page, newer objects were invisible, so the
+  latest manifest read as stale, ingest reused a sequence number, and the
+  service's hash chain forked. Every page is now read (#124).
+- Sia backend: the indexer's object list is eventually consistent, so a
+  batch that started right after another could read the older manifest and
+  fork the hash chain the same way. The Sia backend now serves the manifest
+  it last wrote instead of the listing (#125).
 
 ### Changed
 
@@ -34,6 +42,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Upgrade note: the minimum supported Rust version is now 1.87 (was 1.85),
   because the patched `ctutils` requires it. This only affects building from
   source on an older toolchain.
+- Patched `rustls` 0.23.45 → 0.23.46 (RUSTSEC-2026-0346 to 0349, including
+  `Debug` output exposing TLS secrets and an unauthenticated ServerHello
+  downgrade) and `quinn-proto` 0.11.15 → 0.11.19 (RUSTSEC-2026-0338 to
+  0342, remote panics and memory exhaustion). Both come in through the Sia
+  SDK's HTTP client (#121).
+- Patched `rustls-webpki` 0.103.15 → 0.103.16 (RUSTSEC-2026-0382) and
+  `webpki-roots` 1.0.8 → 1.0.10 (RUSTSEC-2026-0381): certificate checks
+  could accept distrusted emSign intermediates whose private keys are public
+  (CVE-2026-111943). Both sit under rustls, which every HTTP client here
+  uses (#126).
 - Fixed AES-256-GCM (key, nonce) reuse when the manifest's per-service
   sequence counter is rolled back: a failed manifest write followed by the
   next batch, or restoring `manifest.json` or the whole data directory from
