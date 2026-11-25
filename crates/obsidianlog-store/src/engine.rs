@@ -37,8 +37,8 @@ use obsidianlog_core::record::{LogBatch, LogRecord};
 use obsidianlog_core::types::GENESIS;
 
 use crate::chain::{
-    ArchiveMismatch, ChainBreak, ChainBreakKind, NonceKey, compute_chunk_hash, find_nonce_reuse,
-    reconcile_listing, verify_chain,
+    ArchiveMismatch, ChainBreak, ChainBreakKind, NonceKey, VerifiedChain, VerifyFailure,
+    compute_chunk_hash, find_nonce_reuse, reconcile_listing, verify_chain,
 };
 use crate::chunking::{DEFAULT_WINDOW_SECS, chunk_batch, window_bounds};
 use crate::compress::{DEFAULT_LEVEL, compress, decompress};
@@ -340,8 +340,17 @@ impl<B: StorageBackend> ArchiveEngine<B> {
     /// can't produce is reported as [`ChainBreakKind::Missing`] at its
     /// manifest position — the first break found is returned.
     pub async fn verify_service(&self, service: &str) -> Result<usize> {
+        Ok(self.verify_service_detailed(service).await?.chunks)
+    }
+
+    /// [`Self::verify_service`], keeping the failure's structured detail
+    /// (break kind, position, sequence) and the verified head hash.
+    pub async fn verify_service_detailed(
+        &self,
+        service: &str,
+    ) -> std::result::Result<VerifiedChain, VerifyFailure> {
         let manifest = self.read_manifest_or_default().await?;
-        let (count, keys) = self.verify_service_in(&manifest, service).await?;
+        let (verified, keys) = self.verify_service_in(&manifest, service).await?;
         if let Some(((_, sequence), (other_service, other_sequence))) = find_nonce_reuse(&keys) {
             return Err(ArchiveMismatch::NonceReuse {
                 sequence,
@@ -350,22 +359,27 @@ impl<B: StorageBackend> ArchiveEngine<B> {
             }
             .into());
         }
-        Ok(count)
+        Ok(verified)
     }
 
     /// Every per-service check of [`Self::verify_service`] against an
-    /// already-read `manifest`, returning the number of chunks verified and
-    /// each verified chunk's `(service, sequence, (key, nonce))` for the nonce
+    /// already-read `manifest`, returning the verified chain and each
+    /// verified chunk's `(service, sequence, (key, nonce))` for the nonce
     /// check, which [`Self::verify_all`] runs across the whole archive.
+    #[allow(clippy::type_complexity)]
     async fn verify_service_in(
         &self,
         manifest: &Manifest,
         service: &str,
-    ) -> Result<(usize, Vec<(String, u64, NonceKey)>)> {
+    ) -> std::result::Result<(VerifiedChain, Vec<(String, u64, NonceKey)>), VerifyFailure> {
         let stored = self.backend.list_chunks(service, None).await?;
         let Some(chain) = manifest.services.get(service) else {
             if stored.is_empty() {
-                return Ok((0, Vec::new()));
+                let empty = VerifiedChain {
+                    chunks: 0,
+                    head_hash: None,
+                };
+                return Ok((empty, Vec::new()));
             }
             return Err(ArchiveMismatch::UnknownService {
                 count: stored.len(),
@@ -389,15 +403,17 @@ impl<B: StorageBackend> ArchiveEngine<B> {
                     }
                     .into());
                 }
-                Err(e) => return Err(e),
+                Err(e) => return Err(e.into()),
             };
             chunks.push(chunk);
         }
 
         verify_chain(&chunks)?;
 
+        let mut head_hash = None;
         if let Some(last) = chunks.last() {
-            if compute_chunk_hash(last) != chain.head_hash {
+            let hash = compute_chunk_hash(last);
+            if hash != chain.head_hash {
                 return Err(ChainBreak {
                     position: chunks.len() - 1,
                     sequence: last.header.sequence,
@@ -405,6 +421,7 @@ impl<B: StorageBackend> ArchiveEngine<B> {
                 }
                 .into());
             }
+            head_hash = Some(hash);
         }
 
         reconcile_listing(&chain.chunks, &stored)?;
@@ -419,7 +436,11 @@ impl<B: StorageBackend> ArchiveEngine<B> {
                 )
             })
             .collect();
-        Ok((chunks.len(), keys))
+        let verified = VerifiedChain {
+            chunks: chunks.len(),
+            head_hash,
+        };
+        Ok((verified, keys))
     }
 
     /// Verify every service in the manifest, plus any service the backend
@@ -432,6 +453,22 @@ impl<B: StorageBackend> ArchiveEngine<B> {
     /// reuse found fails both services involved (or the one service, if both
     /// chunks belong to it), unless they already failed for another reason.
     pub async fn verify_all(&self) -> Result<Vec<(String, Result<usize>)>> {
+        Ok(self
+            .verify_all_detailed()
+            .await?
+            .into_iter()
+            .map(|(service, result)| (service, result.map(|v| v.chunks).map_err(Error::from)))
+            .collect())
+    }
+
+    /// [`Self::verify_all`], keeping each failure's structured detail and
+    /// each verified chain's head hash. The outer `Err` means verification
+    /// couldn't start (the manifest or the backend's service list couldn't
+    /// be read).
+    #[allow(clippy::type_complexity)]
+    pub async fn verify_all_detailed(
+        &self,
+    ) -> Result<Vec<(String, std::result::Result<VerifiedChain, VerifyFailure>)>> {
         let manifest = self.read_manifest_or_default().await?;
         let mut services: BTreeSet<String> = manifest.services.keys().cloned().collect();
         services.extend(self.backend.list_services().await?);
@@ -440,9 +477,9 @@ impl<B: StorageBackend> ArchiveEngine<B> {
         let mut seen = Vec::new();
         for service in services {
             let result = match self.verify_service_in(&manifest, &service).await {
-                Ok((count, keys)) => {
+                Ok((verified, keys)) => {
                     seen.extend(keys);
-                    Ok(count)
+                    Ok(verified)
                 }
                 Err(e) => Err(e),
             };

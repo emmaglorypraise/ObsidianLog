@@ -96,6 +96,19 @@ pub struct VerifyArgs {
     /// Restrict verification to a single service's chain.
     #[arg(long, value_name = "NAME")]
     pub service: Option<String>,
+
+    /// Output format for the verification results.
+    #[arg(long, value_enum, default_value_t = VerifyFormat::Human)]
+    pub format: VerifyFormat,
+}
+
+/// Rendering format for verify results.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum VerifyFormat {
+    /// One OK/FAIL line per service.
+    Human,
+    /// A single JSON object with a result per service, for CI scripts.
+    Json,
 }
 
 /// Rendering format for query results.

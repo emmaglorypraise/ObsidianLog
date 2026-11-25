@@ -64,6 +64,7 @@ So it checks both content and order, not just content.
 | Flag | Description |
 | --- | --- |
 | `--service <NAME>` | Restrict verification to a single service's chain. Omit to verify every service. |
+| `--format <FORMAT>` | `human` (default) prints one OK/FAIL line per service. `json` prints one JSON object for CI scripts; see [JSON output](#json-output). |
 
 Plus the global [`--config <FILE>`](/cli/overview#global-flags).
 
@@ -90,3 +91,51 @@ For a chain that fails, `verify` prints which service and what was found (a
 missing, modified or reordered chunk, a head mismatch, a chunk missing from
 the manifest, a forked sequence, an unknown service, or a reused key and
 nonce), rather than just a pass/fail.
+
+## JSON output
+
+`--format json` prints a single object. The exit code is the same as with
+`human`: non-zero if any service fails.
+
+```json
+{
+  "ok": false,
+  "services": [
+    { "service": "api", "ok": true, "chunks": 3, "head_hash": "9f2c…" },
+    {
+      "service": "billing",
+      "ok": false,
+      "error": {
+        "kind": "modified",
+        "position": 1,
+        "sequence": 1,
+        "message": "chain integrity violation: hash-chain break at position 1 (sequence 1): modified chunk"
+      }
+    }
+  ]
+}
+```
+
+- `chunks` and `head_hash` (hex, or `null` for a service with no chunks) are
+  present when `ok` is `true`. Record them on each run: a service's chunk
+  count should only go up, which catches the deletion described under
+  [What it doesn't check](#what-it-doesnt-check).
+- `error.kind` is one of the following, with these extra fields:
+
+  | `kind` | Fields |
+  | --- | --- |
+  | `modified`, `reordered`, `missing`, `head_mismatch` | `position`, `sequence` |
+  | `unlisted` | `window`, `sequence` (the first unlisted chunk), `count` |
+  | `duplicate_sequence` | `sequence`, `count` |
+  | `unknown_service` | `count` |
+  | `nonce_reuse` | `sequence`, `other_service`, `other_sequence` |
+  | `error` | none: verification couldn't run, for example the backend failed |
+
+  Every error also has a human-readable `message`.
+- An empty archive prints `{"ok": true, "services": []}`.
+
+For example, to fail a CI job and list the broken services:
+
+```sh
+obsidianlog verify --format json > verify.json || jq -r '.services[] | select(.ok | not) | .service' verify.json
+```

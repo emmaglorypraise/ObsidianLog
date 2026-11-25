@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `verify --format json` prints one JSON object with a result per service,
+  so CI scripts don't have to parse the text output. Failures keep their
+  structured detail (kind, position, sequence), and verified services include
+  their chunk count and head hash. The exit code is unchanged (#134).
+- `obsidianlog-store`: `ArchiveEngine::verify_service_detailed` and
+  `verify_all_detailed` return the new `VerifiedChain` and `VerifyFailure`
+  types instead of a flattened error string. `verify_service` and
+  `verify_all` are unchanged.
+
 ### Fixed
 
 - `query --format human` printed raw ANSI escapes such as `←[33m` in

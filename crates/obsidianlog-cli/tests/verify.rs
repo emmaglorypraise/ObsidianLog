@@ -133,3 +133,67 @@ async fn verify_scopes_to_a_single_service_with_the_service_flag() {
         .expect("failed to run `obsidianlog verify --service nonexistent`");
     assert!(output.status.success());
 }
+
+fn run_verify_json(config_path: &Path, extra: &[&str]) -> (Output, serde_json::Value) {
+    let output = Command::new(env!("CARGO_BIN_EXE_obsidianlog"))
+        .arg("verify")
+        .arg("--config")
+        .arg(config_path)
+        .args(["--format", "json"])
+        .args(extra)
+        .output()
+        .expect("failed to run `obsidianlog verify --format json`");
+    let report = serde_json::from_slice(&output.stdout).unwrap_or_else(|e| {
+        panic!(
+            "stdout must be valid JSON ({e}): {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    (output, report)
+}
+
+#[tokio::test]
+async fn verify_json_reports_an_intact_chain_and_then_the_break() {
+    let dir = tempfile::tempdir().unwrap();
+    let data_dir = dir.path().join("data");
+    let config_path = dir.path().join("config.toml");
+    write_config(&config_path, &data_dir);
+
+    // Empty archive.
+    let (output, report) = run_verify_json(&config_path, &[]);
+    assert!(output.status.success());
+    assert_eq!(report, serde_json::json!({ "ok": true, "services": [] }));
+
+    seed(&data_dir).await;
+
+    // Intact, and the same with --service.
+    for extra in [&[][..], &["--service", "api"][..]] {
+        let (output, report) = run_verify_json(&config_path, extra);
+        assert!(output.status.success(), "{report}");
+        assert_eq!(report["ok"], true);
+        let api = &report["services"][0];
+        assert_eq!(api["service"], "api");
+        assert_eq!(api["ok"], true);
+        assert_eq!(api["chunks"], 3);
+        assert_eq!(api["head_hash"].as_str().unwrap().len(), 64);
+    }
+
+    // Corrupt the middle chunk: non-zero exit, structured break.
+    let chunk_path = data_dir
+        .join("obsidianlog")
+        .join("chunks")
+        .join("api")
+        .join("1970-01-01-01-1.bin");
+    let mut bytes = std::fs::read(&chunk_path).unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 0xFF;
+    std::fs::write(&chunk_path, bytes).unwrap();
+
+    let (output, report) = run_verify_json(&config_path, &[]);
+    assert!(!output.status.success(), "{report}");
+    assert_eq!(report["ok"], false);
+    let error = &report["services"][0]["error"];
+    assert_eq!(error["kind"], "modified", "{report}");
+    assert_eq!(error["position"], 1);
+    assert_eq!(error["sequence"], 1);
+}
