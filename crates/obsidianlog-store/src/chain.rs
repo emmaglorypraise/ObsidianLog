@@ -229,6 +229,70 @@ impl From<ArchiveMismatch> for obsidianlog_core::Error {
     }
 }
 
+/// A service whose chain passed every verification check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VerifiedChain {
+    /// Number of chunks verified.
+    pub chunks: usize,
+    /// Hash of the newest chunk, which the manifest's head hash matched.
+    /// `None` when the service has no chunks.
+    pub head_hash: Option<[u8; 32]>,
+}
+
+/// Why a service failed verification, keeping the structured detail that
+/// converting to [`obsidianlog_core::Error`] flattens into a string.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum VerifyFailure {
+    /// The chain itself is broken.
+    Break(ChainBreak),
+    /// The backend's contents disagree with the manifest (ADR-0017).
+    Mismatch(ArchiveMismatch),
+    /// Verification couldn't run, for example because the backend failed.
+    Other(obsidianlog_core::Error),
+}
+
+impl From<ChainBreak> for VerifyFailure {
+    fn from(b: ChainBreak) -> Self {
+        Self::Break(b)
+    }
+}
+
+impl From<ArchiveMismatch> for VerifyFailure {
+    fn from(m: ArchiveMismatch) -> Self {
+        Self::Mismatch(m)
+    }
+}
+
+impl From<obsidianlog_core::Error> for VerifyFailure {
+    fn from(e: obsidianlog_core::Error) -> Self {
+        Self::Other(e)
+    }
+}
+
+impl From<VerifyFailure> for obsidianlog_core::Error {
+    fn from(failure: VerifyFailure) -> Self {
+        match failure {
+            VerifyFailure::Break(b) => b.into(),
+            VerifyFailure::Mismatch(m) => m.into(),
+            VerifyFailure::Other(e) => e,
+        }
+    }
+}
+
+impl std::fmt::Display for VerifyFailure {
+    /// Same text as the [`obsidianlog_core::Error`] it converts to.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Break(b) => obsidianlog_core::Error::from(*b).fmt(f),
+            Self::Mismatch(m) => obsidianlog_core::Error::from(m.clone()).fmt(f),
+            Self::Other(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for VerifyFailure {}
+
 /// Compare a service's stored chunks (`stored`, as listed by the backend)
 /// with the manifest's chunk list (`listed`). Returns the first problem found:
 /// a sequence claimed more than once, then chunks the manifest doesn't list.
